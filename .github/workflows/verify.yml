@@ -1,0 +1,34 @@
+# The verification chain, run on every push and pull request.
+#
+# The zero-third-party claim is published on the tool's own page, so the check
+# that enforces it belongs somewhere that runs without anyone remembering to run
+# it. `npm run verify` is the same command a contributor runs locally; nothing
+# here is a CI-only variant of it.
+#
+# This establishes the BUILD-ARTEFACT half of acceptance test 17. The other half
+# is a run against the deployed address, which no workflow here can perform, and
+# which is gated by NETWORK_CLAIM_VERIFIED in src/lib/site.ts.
+name: verify
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - run: npm ci
+
+      # check:network drives a real browser. Nothing else in the chain needs one.
+      - run: npx playwright install --with-deps chromium
+
+      - run: npm run verify
