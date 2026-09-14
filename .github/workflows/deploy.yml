@@ -1,0 +1,92 @@
+# Publish the tool.
+#
+# NOTHING DEPLOYS THAT HAS NOT PASSED THE WHOLE CHAIN. `npm run verify` runs
+# first, so a build failing the privacy scan, the tests or the browser check
+# cannot reach the site. That ordering is the point of this file: the privacy
+# claim is published on the page itself, and a deploy that outran its own check
+# would publish a claim nothing had verified.
+#
+# See deploy/README.md for the credentials this needs and why the router exists.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy_router:
+        description: 'Also deploy the benchtools.ligant.ai router (needed once)'
+        type: boolean
+        default: false
+      verify_deployed:
+        description: 'Run acceptance test 17 against the deployed address'
+        type: boolean
+        default: false
+
+# One deploy at a time, and never cancel one midway: a half-published site is
+# worse than a late one.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PROJECT: ligant-antibody-titration-planner
+      DEPLOYED_URL: https://benchtools.ligant.ai/antibody-titration-planner/
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Fail early if the credentials are missing
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be set as repository secrets."
+            echo "See deploy/README.md for the three permissions the token needs."
+            exit 1
+          fi
+
+      - run: npm ci
+
+      # check:network drives a real browser. Nothing else in the chain needs one.
+      - run: npx playwright install --with-deps chromium
+
+      # The gate. This also produces dist/, which is what gets published.
+      - run: npm run verify
+
+      # Creating a project that already exists is not an error worth stopping
+      # for, so the first deploy and every later one run the same way.
+      - name: Ensure the Pages project exists
+        run: npx --yes wrangler@4 pages project create "$PROJECT" --production-branch main || true
+
+      - name: Publish to Pages
+        run: npx --yes wrangler@4 pages deploy dist --project-name "$PROJECT" --branch main
+
+      - name: Deploy the router
+        if: ${{ inputs.deploy_router }}
+        working-directory: deploy/router
+        run: npx --yes wrangler@4 deploy
+
+      # Acceptance test 17, which a local run cannot satisfy. Deliberately able
+      # to fail the job: if the deployed page contacts another origin, that is
+      # exactly the thing the tool claims it does not do.
+      - name: Acceptance test 17, against the deployed address
+        if: ${{ inputs.verify_deployed }}
+        run: node scripts/check-network.mjs "$DEPLOYED_URL"
+
+      - name: Where it went
+        run: |
+          echo "Published to https://$PROJECT.pages.dev/" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ inputs.deploy_router }}" = "true" ]; then
+            echo "Router deployed. The tool answers at $DEPLOYED_URL" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Router not deployed in this run. Re-run with deploy_router to bind $DEPLOYED_URL" >> "$GITHUB_STEP_SUMMARY"
+          fi
