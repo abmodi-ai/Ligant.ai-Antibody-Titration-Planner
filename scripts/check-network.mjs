@@ -242,7 +242,12 @@ for (const phrase of [
   'Staining volume',
   'Round-trip tolerance',
   'Ratio-test tolerance',
-  'To be derived',
+  // Acceptance 21 asks the page to state which constants are uncharacterised.
+  // Measured but not yet accepted is its own state and is the one these two are
+  // in: the figure is the developer's and the decision is not, so the register
+  // must say so rather than present either as settled.
+  'AWAITING SIGN-OFF',
+  'MEASURED, NOT YET ACCEPTED',
   'Displayed precision matches the resolution of the physical act the number drives',
 ]) {
   if (!body.includes(phrase)) fail(`the constants register does not state ${phrase}`)

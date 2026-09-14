@@ -441,9 +441,17 @@ describe('the disclosure lists the page renders', () => {
 
   it('carries the constants register, with every uncharacterised value marked', () => {
     // Acceptance 21: the page states which are uncharacterised.
-    const open = CONSTANTS_REGISTER.filter((entry) => entry.value === 'To be derived')
-    expect(open.map((e) => e.id).sort()).toEqual(['ratio-test-tolerance', 'round-trip-tolerance'])
-    for (const entry of open) expect(entry.status).toMatch(/OPEN/)
+    // Measured but not yet accepted is its own state, and the register must not
+    // collapse it into either "open" or "closed". A row claiming an owner's
+    // decision on her behalf is the silent behaviour-determining choice section
+    // 11 exists to prevent.
+    const awaiting = CONSTANTS_REGISTER.filter((entry) => entry.value.includes('AWAITING SIGN-OFF'))
+    expect(awaiting.map((e) => e.id).sort()).toEqual(['ratio-test-tolerance', 'round-trip-tolerance'])
+    for (const entry of awaiting) {
+      expect(entry.status).toMatch(/MEASURED, NOT YET ACCEPTED/)
+      // The measurement itself is on the page, not only its status.
+      expect(entry.value).toMatch(/\d+ ULP/)
+    }
   })
 
   it('records that C1 has not yet adopted the rounding convention', () => {

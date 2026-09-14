@@ -470,18 +470,18 @@ export const CONSTANTS_REGISTER: readonly RegisterEntry[] = [
   {
     id: 'round-trip-tolerance',
     label: 'Round-trip tolerance',
-    value: 'To be derived',
+    value: 'Measured at 1 ULP, compared with less than or equal. AWAITING SIGN-OFF',
     basis: 'derived',
     status:
-      'OPEN, URS open item 6. The analytic bound is 2 ULP for the four-operation round trip unless the implementation folds the unit factors, which this one does; unit normalisation by non-power-of-two factors adds further roundings. To be measured over this tool’s own operation set before ship, as C1’s was.',
+      'URS open item 6. MEASURED, NOT YET ACCEPTED: the figure is the developer’s and the decision is NADIRA’s, and a register row is not a review. Worst observed error 1.0 ULP over 200,000 cases across eleven decades of concentration, with zero exceedances. This is a REQUIREMENT ON HOW THE CONVERSION IS STRUCTURED rather than an observation about it: the round trip is two operations against one folded constant, because the unit factors are folded at entry. Applied stepwise it would be six operations, and C1 measured that path reaching 3.0 ULP and exceeding a 1 ULP bound in 0.54% of cases. A tool inheriting this row as an observation would fail it. Recorded in docs/open-item-06-derived-tolerances.md.',
   },
   {
     id: 'ratio-test-tolerance',
     label: 'Ratio-test tolerance',
-    value: 'To be derived',
+    value: 'Measured at 4 ULP, compared with less than or equal. AWAITING SIGN-OFF',
     basis: 'derived',
     status:
-      'OPEN, URS open item 6. Derived over the stated series-generation method and no other; it does not inherit the round-trip figure. Its sensitivity is bounded on both sides by recording the inserted rounding precision at which the ratio test detects an accumulated error and the coarsest at which it does not.',
+      'URS open item 6. MEASURED, NOT YET ACCEPTED, on the same terms as the row above. Derived over the stated generation method and no other, and it does not inherit the round-trip figure: 3,300,000 consecutive ratios at twelve points, factors from 1.01 to 20, top points across ten decades, with 9 cases at 4 ULP and none above. A Math.pow-generated series differs from the stated method by up to 4 ULP at a factor of 1.7, which is the whole of this bound, and by nothing at all at a factor of 3, which is why the non-integer case is in the fixture set. Sensitivity is bounded on both sides: an inserted rounding is detected at 15 significant figures and NOT detected at 16. Recorded in docs/open-item-06-derived-tolerances.md.',
   },
   {
     id: 'viewport-supported',

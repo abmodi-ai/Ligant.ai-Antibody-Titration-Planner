@@ -1,0 +1,208 @@
+{
+  "_comment": [
+    "The fixture set both implementations are run against, per URS acceptance 3.",
+    "INPUTS ONLY. Neither implementation reads the other's results from this file;",
+    "each computes from these declarations and the two are compared afterwards, on",
+    "the unrounded values, by reimpl/compare.test.ts.",
+    "",
+    "Every fixture states the assumption it was constructed under, as C4-FX-22",
+    "requires, in its own `assumption` field. The set as a whole is deliberately",
+    "mixed: most cases use a factor of 2 and a round top point and are therefore",
+    "dyadic, and c4-fx-01 and c4-fx-06 are the non-dyadic, non-2-fold cases that",
+    "keep the arithmetic from being exercised only on values a binary machine",
+    "handles exactly. c4-fx-08 is the negative control and raises no flags."
+  ],
+  "fixtures": [
+    {
+      "id": "acceptance-1-reference",
+      "assumption": "Round top point, factor 2, so every value is dyadic. Two displayed values land on exact binary ties at 3 sf (0.3125 and 0.03125) and the URS table is correct only under round half away from zero.",
+      "inputs": {
+        "stock": { "kind": "stated", "concentration": { "value": 0.2, "unit": "mg/mL" }, "massBasis": "antibody-protein" },
+        "stockSource": "certificate-of-analysis",
+        "vendor": { "basis": "none" },
+        "stainingVolume": { "value": 100, "unit": "uL" },
+        "cellNumber": { "value": 1, "unit": "cells-1e6" },
+        "pipettingMinimum": { "value": 2, "provenance": "entered" },
+        "topPoint": { "form": 2, "value": 1 },
+        "dilutionFactor": 2,
+        "points": 6,
+        "imported": null
+      }
+    },
+    {
+      "id": "c4-fx-08-negative-control",
+      "assumption": "Constructed so that C4-FL-01, C4-FL-07 and C4-FL-08 all evaluate and none fires. Dyadic; no value lands on a tie at 3 sf.",
+      "inputs": {
+        "stock": { "kind": "stated", "concentration": { "value": 50, "unit": "ug/mL" }, "massBasis": "antibody-protein" },
+        "stockSource": "certificate-of-analysis",
+        "vendor": {
+          "basis": "per-test-volume-stated",
+          "amountPerTest": { "kind": "volume", "value": { "value": 5, "unit": "uL" } },
+          "testVolume": { "value": 100, "unit": "uL" },
+          "cellNumber": { "value": 1, "unit": "cells-1e6" }
+        },
+        "stainingVolume": { "value": 100, "unit": "uL" },
+        "cellNumber": { "value": 1, "unit": "cells-1e6" },
+        "pipettingMinimum": { "value": 2, "provenance": "entered" },
+        "topPoint": { "form": 2, "value": 0.5 },
+        "dilutionFactor": 2,
+        "points": 3,
+        "imported": null
+      }
+    },
+    {
+      "id": "c4-fx-06-non-round-three-fold",
+      "assumption": "Deliberately non-dyadic and non-2-fold: 0.37 mg/mL into 85 uL at a factor of 3. No computed value is exactly representable and none lands on a tie.",
+      "inputs": {
+        "stock": { "kind": "stated", "concentration": { "value": 0.37, "unit": "mg/mL" }, "massBasis": "antibody-protein" },
+        "stockSource": "certificate-of-analysis",
+        "vendor": { "basis": "none" },
+        "stainingVolume": { "value": 85, "unit": "uL" },
+        "cellNumber": { "value": 1, "unit": "cells-1e6" },
+        "pipettingMinimum": { "value": 2, "provenance": "entered" },
+        "topPoint": { "form": 2, "value": 0.8 },
+        "dilutionFactor": 3,
+        "points": 7,
+        "imported": null
+      }
+    },
+    {
+      "id": "c4-fx-01-hand-calculation",
+      "assumption": "Non-round stock and staining volume, constructed so that no displayed value lies within one ULP of a decimal tie at 3 sf, which is what lets a hand calculation settle the last digit at all.",
+      "inputs": {
+        "stock": { "kind": "stated", "concentration": { "value": 0.145, "unit": "mg/mL" }, "massBasis": "antibody-protein" },
+        "stockSource": "vendor-datasheet",
+        "vendor": { "basis": "none" },
+        "stainingVolume": { "value": 65, "unit": "uL" },
+        "cellNumber": { "value": 2, "unit": "cells-1e6" },
+        "pipettingMinimum": { "value": 1, "provenance": "entered" },
+        "topPoint": { "form": 2, "value": 0.7 },
+        "dilutionFactor": 2.5,
+        "points": 4,
+        "imported": null
+      }
+    },
+    {
+      "id": "twelve-points-non-integer-factor",
+      "assumption": "Twelve points at a factor of 1.7, whose integer powers are not exactly representable. This is the case where the generation method matters most: a pow-generated series differs from this one by up to 4 ULP.",
+      "inputs": {
+        "stock": { "kind": "stated", "concentration": { "value": 1, "unit": "mg/mL" }, "massBasis": "conjugate" },
+        "stockSource": "measured",
+        "vendor": { "basis": "none" },
+        "stainingVolume": { "value": 50, "unit": "uL" },
+        "cellNumber": { "value": 5, "unit": "cells-1e6" },
+        "pipettingMinimum": { "value": 0.5, "provenance": "entered" },
+        "topPoint": { "form": 3, "value": { "value": 20, "unit": "ug/mL" } },
+        "dilutionFactor": 1.7,
+        "points": 12,
+        "imported": null
+      }
+    },
+    {
+      "id": "c4-fx-07-no-stock-concentration",
+      "assumption": "C4-AB-03: the vendor states only tests per vial. The series is volumetric, forms 1 and 4 are reported and forms 2, 3, 5 and 6 are not computable. Top point entered as a volume, so the anchor is a volume.",
+      "inputs": {
+        "stock": { "kind": "not-stated-by-vendor" },
+        "stockSource": "vendor-datasheet",
+        "vendor": { "basis": "none" },
+        "stainingVolume": { "value": 100, "unit": "uL" },
+        "cellNumber": { "value": 1, "unit": "cells-1e6" },
+        "pipettingMinimum": { "value": 2, "provenance": "entered" },
+        "topPoint": { "form": 1, "value": { "value": 10, "unit": "uL" } },
+        "dilutionFactor": 2,
+        "points": 5,
+        "imported": null
+      }
+    },
+    {
+      "id": "c4-fx-14-zero-cells",
+      "assumption": "Zero cells is legal and is a no-cell control condition, not a rejection. Form 5 is not computable because there are no cells to express a mass per.",
+      "inputs": {
+        "stock": { "kind": "stated", "concentration": { "value": 0.5, "unit": "mg/mL" }, "massBasis": "antibody-protein" },
+        "stockSource": "certificate-of-analysis",
+        "vendor": { "basis": "none" },
+        "stainingVolume": { "value": 200, "unit": "uL" },
+        "cellNumber": { "value": 0, "unit": "cells" },
+        "pipettingMinimum": { "value": 2, "provenance": "default" },
+        "topPoint": { "form": 2, "value": 2 },
+        "dilutionFactor": 2,
+        "points": 4,
+        "imported": null
+      }
+    },
+    {
+      "id": "c4-fx-19b-import-reported",
+      "assumption": "An assembled-molecule molecular weight against an antibody-protein stock: the first reportable pair, so form 6 is computed. Tests the only path by which a molar concentration exists at all.",
+      "inputs": {
+        "stock": { "kind": "stated", "concentration": { "value": 0.2, "unit": "mg/mL" }, "massBasis": "antibody-protein" },
+        "stockSource": "certificate-of-analysis",
+        "vendor": { "basis": "none" },
+        "stainingVolume": { "value": 100, "unit": "uL" },
+        "cellNumber": { "value": 1, "unit": "cells-1e6" },
+        "pipettingMinimum": { "value": 2, "provenance": "entered" },
+        "topPoint": { "form": 2, "value": 1 },
+        "dilutionFactor": 2,
+        "points": 6,
+        "imported": {
+          "gPerMol": 150000,
+          "provenance": "certificate-of-analysis",
+          "massBasis": "assembled",
+          "flags": [],
+          "toolVersion": "C1 v0.1.0"
+        }
+      }
+    },
+    {
+      "id": "c4-fx-02-millilitre-path",
+      "assumption": "The same system as the reference case with the staining volume entered in millilitres and the stock in micrograms per millilitre. Compared against the reference fixture, this is C4-IV-04.",
+      "inputs": {
+        "stock": { "kind": "stated", "concentration": { "value": 200, "unit": "ug/mL" }, "massBasis": "antibody-protein" },
+        "stockSource": "certificate-of-analysis",
+        "vendor": { "basis": "none" },
+        "stainingVolume": { "value": 0.1, "unit": "mL" },
+        "cellNumber": { "value": 1000000, "unit": "cells" },
+        "pipettingMinimum": { "value": 2, "provenance": "entered" },
+        "topPoint": { "form": 2, "value": 1 },
+        "dilutionFactor": 2,
+        "points": 6,
+        "imported": null
+      }
+    },
+    {
+      "id": "c4-fx-20-top-entered-as-volume",
+      "assumption": "The top point is entered as a volume per test, so the persisted input is that volume and the anchor concentration is derived from it on every render. Dyadic.",
+      "inputs": {
+        "stock": { "kind": "stated", "concentration": { "value": 0.4, "unit": "mg/mL" }, "massBasis": "antibody-protein" },
+        "stockSource": "certificate-of-analysis",
+        "vendor": { "basis": "none" },
+        "stainingVolume": { "value": 100, "unit": "uL" },
+        "cellNumber": { "value": 1, "unit": "cells-1e6" },
+        "pipettingMinimum": { "value": 2, "provenance": "entered" },
+        "topPoint": { "form": 1, "value": { "value": 10, "unit": "uL" } },
+        "dilutionFactor": 2,
+        "points": 6,
+        "imported": null
+      }
+    },
+    {
+      "id": "c4-fx-13-final-concentration-basis",
+      "assumption": "A vendor recommendation stated as a dilution factor from stock, read under C4-UN-08 as final over stock, with a cell number differing from the user's.",
+      "inputs": {
+        "stock": { "kind": "stated", "concentration": { "value": 1, "unit": "mg/mL" }, "massBasis": "antibody-protein" },
+        "stockSource": "certificate-of-analysis",
+        "vendor": {
+          "basis": "final-concentration",
+          "concentration": { "dilutionFactor": 100 },
+          "cellNumber": { "value": 5, "unit": "cells-1e6" }
+        },
+        "stainingVolume": { "value": 100, "unit": "uL" },
+        "cellNumber": { "value": 1, "unit": "cells-1e6" },
+        "pipettingMinimum": { "value": 2, "provenance": "entered" },
+        "topPoint": { "form": 3, "value": { "value": 20, "unit": "ug/mL" } },
+        "dilutionFactor": 2,
+        "points": 6,
+        "imported": null
+      }
+    }
+  ]
+}
