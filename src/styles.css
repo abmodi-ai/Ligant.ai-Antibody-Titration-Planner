@@ -959,3 +959,159 @@ table caption {
 
 .site-footer a { color: var(--text-primary); text-decoration: underline; text-underline-offset: 2px; }
 .site-footer a:hover { color: var(--brand-teal); }
+
+/* ---------- the titration series, added for C4 ----------
+ *
+ * Everything above this line is the shared Ligant stylesheet, copied
+ * unchanged. Nothing here restyles any of it. These rules are for concepts C4
+ * has and its siblings do not: a table whose rows are points and whose columns
+ * are forms, a cell that holds a reason rather than a number, and a marker on a
+ * field whose value was carried over rather than entered.
+ *
+ * No colour below is outside the token block and no new grey is introduced.
+ */
+
+/* THE COLUMN HEADINGS ARE NOT UPPERCASED, and this is not a style preference.
+ * The shared `th` rule uppercases, which renders the heading "µL / test" as
+ * "ML / TEST": a micro sign has no uppercase form, so it is dropped, and the
+ * heading then names a unit a thousand times larger than the column beneath
+ * it. A tool whose entire purpose is to stop a volume being read under the
+ * wrong assumption cannot mislabel its own columns. Tracking is kept so the
+ * headings still read as headings. */
+.series-table th[scope="col"] {
+  text-transform: none;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-align: right;
+}
+.series-table th[scope="col"]:first-child { text-align: left; }
+
+.series-table td, .series-table th[scope="row"] { padding: 5px 8px; }
+.series-table th[scope="row"] {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  border-bottom: 1px solid var(--grid);
+  width: 1%;
+}
+/* The series table is twelve rows of numbers by six columns. Alignment is the
+   whole point, so every numeric cell is tabular Plex Mono. */
+.series-table td.num {
+  width: auto;
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A value that is not a number does not sit where a number would be read. It
+   drops the numeral face, exactly as a suppressed hero value does, so a reader
+   scanning the column sees at once that nothing there is a figure. Never
+   greyed out, never struck through, never a dash: it is a statement. */
+.series-table td.num .absent {
+  font-family: var(--font);
+  font-variant-numeric: normal;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* A point named by a flag. Amber, because a flag is the reader's decision, and
+   a wash rather than a rule so the row still reads as part of the table. */
+.series-table tr.point-flagged { background: var(--attention-wash); }
+
+/* Why a column holds no numbers, said once for the series rather than repeated
+   down twelve rows: it is a property of the declarations, not of any point. */
+.form-notes {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.form-notes li {
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+}
+.form-notes b {
+  display: block;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* A value carried across a reload, and the one pre-filled suggestion. Both are
+   amber because both are a decision the reader has not made yet: one is a
+   declaration they did not make in this session, the other a number the tool
+   proposed. Neither is a warning. */
+.retained-marker, .suggestion-marker {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--attention-wash);
+  border: 1px solid var(--brand-amber);
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+/* The constants register. The status column is prose and is the point of the
+   table, so it takes the room. */
+.register-table { font-size: 12px; }
+.register-table th[scope="row"] {
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--grid);
+  vertical-align: top;
+  width: 18%;
+}
+.register-table td { vertical-align: top; padding: 8px 10px; color: var(--text-secondary); }
+.register-table td.prose-cell { font-family: var(--font); line-height: 1.5; min-width: 26ch; }
+
+.series-table caption, .register-table caption {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* The structured object. Wraps rather than scrolling sideways forever. */
+.options pre {
+  max-height: 340px;
+  overflow: auto;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* A completed declaration, shown as what was declared rather than as a tick.
+ * The layout remedy of C4-NF-03: the declaration stays on screen, the fields
+ * that captured it do not. */
+.panel-collapsed .panel-head { border-bottom: none; }
+.panel-summary {
+  padding: 0 16px 13px 46px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+button.disclose {
+  font-size: 11px;
+  padding: 3px 9px;
+}

@@ -454,6 +454,15 @@ describe('the disclosure lists the page renders', () => {
     expect(rounding?.status).toMatch(/NOT YET ADOPTED IN C1/)
   })
 
+  it('declares the viewport requirement it does not meet', () => {
+    // C1's precedent: a requirement the tool DOES NOT MEET is declared in the
+    // register, because this is the page's disclosure surface and an
+    // undeclared shortfall is exactly what the register exists to prevent.
+    const viewport = CONSTANTS_REGISTER.find((e) => e.id === 'viewport-supported')
+    expect(viewport?.status).toMatch(/ACCEPTED DEVIATION/)
+    expect(viewport?.status).toMatch(/THE POINT CAP IS NOT THE BINDING CONSTRAINT/)
+  })
+
   it('records that the pipetting default is on the behaviour path when unchanged', () => {
     const minimum = CONSTANTS_REGISTER.find((e) => e.id === 'pipetting-minimum')
     expect(minimum?.status).toMatch(/ON THE BEHAVIOUR PATH WHENEVER IT IS UNCHANGED/)

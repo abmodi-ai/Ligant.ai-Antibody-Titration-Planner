@@ -116,6 +116,31 @@ export const STOCK_MASS_BASIS_LABEL: Readonly<Record<StockMassBasis, string>> = 
 }
 
 /**
+ * The same three options, named rather than explained.
+ *
+ * The labels above carry the instruction a reader needs when CHOOSING, which is
+ * why they are long. A summary of a choice already made needs the name of it,
+ * and printing the instruction back at the reader would bury the value the
+ * summary exists to keep on screen.
+ */
+export const STOCK_MASS_BASIS_SHORT: Readonly<Record<StockMassBasis, string>> = {
+  'antibody-protein': 'antibody protein',
+  conjugate: 'conjugate, including label or payload',
+  'not-recorded': 'mass basis not recorded',
+}
+
+/**
+ * A cell count, written the way it is said.
+ *
+ * "1 cells x 10^6" is what a naive value-then-unit join produces and is not a
+ * quantity anyone writes. The multiplier belongs between the number and the
+ * noun.
+ */
+export function formatCellCount(value: string | number, unit: CellUnit): string {
+  return unit === 'cells-1e6' ? `${value} \u00d7 10\u2076 cells` : `${value} cells`
+}
+
+/**
  * C1-MW-07, as an imported C1 object declares it.
  *
  * Mirrored here rather than imported, because C4 has no dependency on C1's

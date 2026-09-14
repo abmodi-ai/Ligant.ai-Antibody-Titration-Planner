@@ -484,6 +484,14 @@ export const CONSTANTS_REGISTER: readonly RegisterEntry[] = [
       'OPEN, URS open item 6. Derived over the stated series-generation method and no other; it does not inherit the round-trip figure. Its sensitivity is bounded on both sides by recording the inserted rounding precision at which the ratio test detects an accumulated error and the coarsest at which it does not.',
   },
   {
+    id: 'viewport-supported',
+    label: 'Viewport at which C4-NF-03 is met',
+    value: 'NOT MET at any point count at 1366x768 or 1280x800. Met from about 1320px of viewport height at 12 points',
+    basis: 'inspection',
+    status:
+      'ACCEPTED DEVIATION, declared rather than met. C4-NF-03 requires the inputs and the full series to fit one screen without scrolling. Measured 14 September 2026 at both viewports named in the build brief, since the reference viewport is undeclared. THE POINT CAP IS NOT THE BINDING CONSTRAINT and reducing it cannot close the gap: at TWO points with no flags the content still reaches 816px against 768 available, and 802px against 800. The remedy URS open item 7 prescribes therefore does not work, and reducing the cap would cost a user ten points of series for nothing. What did work is collapsing each declaration to a summary of its declared values once the series exists, which took the input column from 2017px to 672px and moved the binding constraint from the inputs to the result. The residual is the masthead and the panel chrome, which are fixed costs. Full measurement in docs/open-item-07-layout-check.md.',
+  },
+  {
     id: 'reference-viewport',
     label: 'Reference viewport',
     value: 'Not declared',
