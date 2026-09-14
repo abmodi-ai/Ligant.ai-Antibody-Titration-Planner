@@ -1,0 +1,445 @@
+/**
+ * The runtime half of the privacy claim, and every assertion that needs a
+ * rendered page.
+ *
+ * TWO JOBS, and the division is the tool set's core convention: pure functions
+ * are tested by vitest in node, and anything that needs a DOM, storage, layout
+ * or a real browser is tested here. There is no jsdom in this project, by
+ * choice: a DOM that is not a browser proves nothing about a page.
+ *
+ * ACCEPTANCE TEST 17 HAS TWO HALVES AND THIS SCRIPT IS BOTH OF THEM, depending
+ * on how it is run:
+ *
+ *   node scripts/check-network.mjs
+ *       serves dist/ locally and drives it. Establishes that the BUILD
+ *       ARTEFACT contacts no other origin. This is what `npm run verify` runs.
+ *
+ *   node scripts/check-network.mjs https://<deployed-address>/
+ *       drives the DEPLOYED page. This is what acceptance 17 actually asks
+ *       for, and the build-artefact run does not substitute for it: a local
+ *       server does not exercise the host, its CDN, or anything a host injects
+ *       into a response.
+ *
+ * The two are held together by NETWORK_CLAIM_VERIFIED in src/lib/site.ts. The
+ * footer makes the strong claim only when that flag is set, and this script
+ * FAILS if the flag is set and the run was local, so the claim cannot go live
+ * on the strength of a local run.
+ *
+ * Requests are RECORDED, NEVER BLOCKED, deliberately. What this proves is that
+ * the code never tries to reach another origin at all, which is a stronger
+ * statement than that something stopped it.
+ */
+
+import { chromium } from 'playwright'
+import { createServer } from 'node:http'
+import { readFileSync, existsSync, statSync } from 'node:fs'
+import { join, extname } from 'node:path'
+
+const PORT = 8971
+const LOCAL_ORIGIN = `http://localhost:${PORT}`
+
+const target = process.argv[2] ?? null
+const isDeployedRun = target !== null
+const origin = isDeployedRun ? new URL(target).origin : LOCAL_ORIGIN
+const pageUrl = isDeployedRun ? target : `${LOCAL_ORIGIN}/`
+
+const site = readFileSync('src/lib/site.ts', 'utf8')
+const constant = (name) => (site.match(new RegExp(`${name}[^=]*=\\s*['"]([^'"]+)['"]`)) ?? [])[1]
+const SITE_URL = constant('SITE_URL')
+const TOOL_PATH = constant('TOOL_PATH')
+const APP_VERSION = constant('APP_VERSION')
+const NETWORK_CLAIM_VERIFIED = /NETWORK_CLAIM_VERIFIED\s*=\s*true/.test(site)
+
+if (!SITE_URL || !TOOL_PATH) {
+  console.error('FAIL: SITE_URL or TOOL_PATH could not be read from src/lib/site.ts')
+  process.exit(1)
+}
+
+const failures = []
+const fail = (what) => failures.push(what)
+
+/* ---------------------------------------------------------------------- *
+ * A static server over dist/, the way a static host resolves paths.       *
+ * Not `vite preview`: what is checked has to be the built artefact itself. *
+ * ---------------------------------------------------------------------- */
+const TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
+  '.xml': 'application/xml',
+  '.txt': 'text/plain; charset=utf-8',
+}
+
+let server = null
+if (!isDeployedRun) {
+  if (!existsSync('dist')) {
+    console.error('FAIL: dist/ is not present. Run npm run build first.')
+    process.exit(1)
+  }
+  server = createServer((request, response) => {
+    let path = join('dist', decodeURIComponent(request.url.split('?')[0]))
+    if (existsSync(path) && statSync(path).isDirectory()) path = join(path, 'index.html')
+    if (!existsSync(path)) {
+      response.writeHead(404, { 'Content-Type': 'text/plain' })
+      response.end('not found')
+      return
+    }
+    response.writeHead(200, { 'Content-Type': TYPES[extname(path)] ?? 'application/octet-stream' })
+    response.end(readFileSync(path))
+  })
+  await new Promise((resolve) => server.listen(PORT, resolve))
+}
+
+const browser = await chromium.launch({
+  args: ['--no-sandbox'],
+  // An explicitly provided browser where there is one, otherwise the chromium
+  // Playwright manages. CI installs that browser itself.
+  executablePath: process.env.CHROME_PATH,
+})
+const page = await browser.newPage({ viewport: { width: 1366, height: 768 } })
+
+const foreign = []
+page.on('request', (request) => {
+  const url = request.url()
+  if (!url.startsWith(origin) && !url.startsWith('data:') && !url.startsWith('blob:')) {
+    foreign.push(`${request.method()} ${url}`)
+  }
+})
+
+await page.goto(pageUrl, { waitUntil: 'networkidle' })
+
+/* ---------------------------------------------------------------------- *
+ * A reader's way in and out of the page                                   *
+ * ---------------------------------------------------------------------- */
+if ((await page.locator('main#main').count()) === 0) fail('there is no main landmark')
+if ((await page.locator('a.skip-link').count()) === 0) fail('there is no skip link')
+if ((await page.locator('.masthead').count()) === 0) fail('there is no masthead')
+if ((await page.locator('footer.site-footer').count()) === 0) fail('there is no site footer')
+if ((await page.title()) === '') fail('the document has no title')
+
+const navCurrent = await page.locator('.tool-nav [aria-current="page"]').first().textContent().catch(() => null)
+if (navCurrent === null) fail('the tool switcher does not mark the current tool')
+
+/* ---------------------------------------------------------------------- *
+ * The declarations gate: acceptance 13                                     *
+ * ---------------------------------------------------------------------- */
+const emptyState = (await page.locator('.rail .empty').textContent().catch(() => '')) ?? ''
+if (!/Nothing is computed yet/i.test(emptyState)) {
+  fail('an empty form computes something, or does not say that it has not')
+}
+for (const phrase of ['the stock concentration', 'the staining volume', 'the cell number', 'the top point']) {
+  if (!emptyState.includes(phrase)) fail(`the empty state does not say it needs ${phrase}`)
+}
+
+/*
+ * The pipetting minimum is the one field that is NOT missing from an empty
+ * form, and that is C4-SR-05 working rather than a gap in the gate: it is
+ * pre-filled at 2 µL and must be VISIBLY MARKED AS A SUGGESTION. The default is
+ * on the behaviour path whenever it is unchanged, so what acceptance 13 needs
+ * here is not that the field is empty but that the reader can see the tool
+ * proposed the number rather than that they chose it.
+ */
+const prefilled = await page.inputValue('#pipetting-minimum').catch(() => '')
+if (prefilled !== '2') fail(`the pipetting minimum is pre-filled with ${prefilled || 'nothing'}, expected 2`)
+if ((await page.locator('.suggestion-marker').count()) === 0) {
+  fail('the pre-filled pipetting minimum is not visibly marked as a suggestion')
+}
+
+/* ---------------------------------------------------------------------- *
+ * The reference case of acceptance 1, driven through the real interface    *
+ * ---------------------------------------------------------------------- */
+/**
+ * Reopen a collapsed declaration panel.
+ *
+ * Panels collapse to a summary once a series exists, which is the layout remedy
+ * for C4-NF-03. Driving the interface afterwards therefore has to reopen them,
+ * and doing so here means the reopening is exercised on every run rather than
+ * assumed: a panel that collapsed and could not be reopened would have hidden a
+ * declaration, which is the one thing that remedy must not do.
+ */
+async function expandPanel(step) {
+  const panel = page.locator('.stack > .panel').nth(step - 1)
+  const change = panel.getByRole('button', { name: 'Change' })
+  if ((await change.count()) > 0) {
+    await change.click()
+    await page.waitForTimeout(80)
+  }
+}
+
+async function enterReferenceCase(points = '6') {
+  await page.fill('#stock-value', '0.2')
+  await page.selectOption('#stock-unit', 'mg/mL')
+  await page.selectOption('#stock-mass-basis', 'antibody-protein')
+  await page.selectOption('#stock-source', 'certificate-of-analysis')
+  await page.fill('#staining-volume', '100')
+  await page.fill('#cell-number', '1')
+  await page.selectOption('#top-form', '2')
+  await page.fill('#top-value', '1')
+  await page.fill('#dilution-factor', '2')
+  await page.fill('#points', points)
+  await page.waitForTimeout(150)
+}
+
+await enterReferenceCase()
+
+const firstRow = await page.locator('.series-table tbody tr').first().innerText()
+for (const expected of ['5.00', '1.00', '10.0', '20.0']) {
+  if (!firstRow.includes(expected)) fail(`the rendered top point is missing ${expected}`)
+}
+const lastRow = await page.locator('.series-table tbody tr').last().innerText()
+for (const expected of ['0.156', '0.0313', '0.313', '640']) {
+  if (!lastRow.includes(expected)) fail(`the rendered sixth point is missing ${expected}`)
+}
+
+// The column headings name the units they hold. A heading reading ML where the
+// column holds microlitres is the defect this pins.
+const headings = await page.locator('.series-table thead th').allInnerTexts()
+if (!headings.some((h) => h.includes('µL'))) fail('the volume column is not headed in microlitres')
+if (headings.some((h) => /\bML\b/.test(h))) {
+  fail('a column heading has been uppercased into ML, which names a different unit')
+}
+
+// C4-FL-03 names its points, and the rows it names are marked.
+const flagText = (await page.locator('.rail .flag').first().innerText().catch(() => '')) ?? ''
+if (!flagText.includes('C4-FL-03')) fail('C4-FL-03 is not shown with its reason code')
+if (!/point 3/.test(flagText)) fail('C4-FL-03 does not name the points it is about')
+if (!/1 in 80\.0 from stock/.test(flagText)) {
+  fail('C4-FL-03 does not carry each point with its dilution factor from stock')
+}
+const flaggedRows = await page.locator('.series-table tbody tr.point-flagged').count()
+if (flaggedRows !== 4) fail(`${flaggedRows} rows are marked as flagged, expected 4`)
+
+/* ---------------------------------------------------------------------- *
+ * Acceptance 21 to 23: the disclosures, on the tool's own address           *
+ * ---------------------------------------------------------------------- */
+const body = await page.locator('main').innerText()
+
+// Acceptance 22: the fourteen failure classes.
+for (const phrase of [
+  'Loss of antibody activity',
+  'Absence of Fc receptor blocking',
+  'Which binding regime applies',
+  'Matrix transfer',
+  'Volume accommodation',
+  'Dilution convention',
+  'Mass-basis mismatch',
+  'Saturation',
+]) {
+  if (!body.includes(phrase)) fail(`the failure classes do not mention ${phrase}`)
+}
+
+// Acceptance 21: the register, with the uncharacterised values marked.
+for (const phrase of [
+  'Minimum reliable pipetting volume',
+  'Maximum point count',
+  'Displayed precision',
+  'Rounding mode at displayed precision',
+  'Dilution factor',
+  'Staining volume',
+  'Round-trip tolerance',
+  'Ratio-test tolerance',
+  // Acceptance 21 asks the page to state which constants are uncharacterised.
+  // Measured but not yet accepted is its own state and is the one these two are
+  // in: the figure is the developer's and the decision is not, so the register
+  // must say so rather than present either as settled.
+  'AWAITING SIGN-OFF',
+  'MEASURED, NOT YET ACCEPTED',
+  'Displayed precision matches the resolution of the physical act the number drives',
+]) {
+  if (!body.includes(phrase)) fail(`the constants register does not state ${phrase}`)
+}
+
+// Acceptance 23: the three convention statements, on the output.
+for (const [what, phrase] of [
+  ['C4-OUT-10, the staining volume assumption', 'final volume of the stain, including the antibody'],
+  ['C4-OUT-11, the dilution convention', 'final volume divided by stock volume'],
+  ['C4-OUT-07, the precision and rounding rule', 'rounded half away from zero'],
+  ['C4-OUT-08, what the tool does not verify', 'does not verify what was prepared'],
+]) {
+  if (!body.includes(phrase)) fail(`${what} is not stated on the page`)
+}
+
+// C4-OUT-06, the scope statement, and C4-OUT-02, the derivation.
+const wholePage = await page.locator('body').innerText()
+if (!wholePage.includes('Research use only. Not qualified for GxP decision-making.')) {
+  fail('the scope statement of C4-OUT-06 is not displayed')
+}
+for (const phrase of ['Cell density', 'Stock provenance', 'Stock mass basis', 'Vendor basis', 'Pipetting minimum', 'Engine version']) {
+  if (!wholePage.includes(phrase)) fail(`the derivation does not state ${phrase}`)
+}
+if (!wholePage.includes(APP_VERSION)) fail('the engine version is not stated on the output')
+
+/* ---------------------------------------------------------------------- *
+ * Acceptance 25 and C4-NF-03: the layout, measured rather than asserted     *
+ * ---------------------------------------------------------------------- */
+await expandPanel(4)
+if ((await page.locator('#points').count()) === 0) {
+  fail('a collapsed declaration panel could not be reopened')
+} else {
+  await page.fill('#points', '12')
+  await page.waitForTimeout(200)
+}
+const layout = await page.evaluate(() => {
+  const panels = [...document.querySelectorAll('.stack > .panel:not(.method-panel)')]
+  const last = panels[panels.length - 1]
+  const rail = document.querySelector('.rail .panel:first-child')
+  const bottom = (el) => (el ? Math.round(el.getBoundingClientRect().bottom + window.scrollY) : 0)
+  return { inner: window.innerHeight, inputs: bottom(last), series: bottom(rail) }
+})
+const needed = Math.max(layout.inputs, layout.series)
+// NOT A FAILURE. C4-NF-03 is declared unmet in the constants register, with
+// its measurements, and the register is the disclosure surface for a
+// requirement the tool does not meet. Failing the build here would make the
+// deviation undeclarable rather than making it go away. It is printed on every
+// run so the number cannot drift unnoticed.
+const layoutNote =
+  `C4-NF-03 at 1366x768, twelve points: content reaches ${needed}px against ${layout.inner}px ` +
+  `available (inputs ${layout.inputs}px, series ${layout.series}px). ` +
+  (needed <= layout.inner ? 'MET.' : 'NOT MET, and declared as an accepted deviation in the register.')
+if (!wholePage.includes('ACCEPTED DEVIATION')) {
+  fail('C4-NF-03 is not met and the register does not declare the deviation')
+}
+
+/* ---------------------------------------------------------------------- *
+ * Every key written is a key disclosed                                     *
+ * ---------------------------------------------------------------------- */
+const storage = await page.evaluate(() => ({
+  local: Object.keys(window.localStorage),
+  session: Object.keys(window.sessionStorage),
+}))
+const disclosed = await page.locator('code').allInnerTexts()
+for (const key of storage.local) {
+  if (!disclosed.includes(key)) fail(`the page writes ${key} without disclosing it`)
+}
+if (storage.session.length > 0) {
+  fail(`the page writes sessionStorage: ${storage.session.join(', ')}`)
+}
+
+// C4-ST-03: nothing persists across a reload unmarked.
+await page.reload({ waitUntil: 'networkidle' })
+const retainedMarkers = await page.locator('.retained-marker').count()
+const restored = await page.inputValue('#staining-volume').catch(() => '')
+if (restored !== '' && retainedMarkers === 0) {
+  fail('values were restored across a reload without being marked as retained')
+}
+
+// "Clear stored data" means what it says: the key is gone, not rewritten empty.
+await page.getByRole('button', { name: 'Clear stored data' }).click()
+await page.waitForTimeout(150)
+const remaining = await page.evaluate(() => Object.keys(window.localStorage))
+if (remaining.length > 0) fail(`clearing stored data left ${remaining.join(', ')} behind`)
+
+/* ---------------------------------------------------------------------- *
+ * Metadata, robots and the licence                                         *
+ * ---------------------------------------------------------------------- */
+const meta = await page.evaluate(() => ({
+  canonical: document.querySelector('link[rel="canonical"]')?.getAttribute('href') ?? null,
+  ogUrl: document.querySelector('meta[property="og:url"]')?.getAttribute('content') ?? null,
+  ogImage: document.querySelector('meta[property="og:image"]')?.getAttribute('content') ?? null,
+  twitterImage: document.querySelector('meta[name="twitter:image"]')?.getAttribute('content') ?? null,
+  themeColour: document.querySelector('meta[name="theme-color"]')?.getAttribute('content') ?? null,
+}))
+for (const [name, value] of Object.entries(meta)) {
+  if (value === null) fail(`the document has no ${name}`)
+}
+for (const [name, value] of [['og:image', meta.ogImage], ['twitter:image', meta.twitterImage]]) {
+  // A relative social image yields a preview card with no image.
+  if (value !== null && !/^https?:\/\//.test(value)) fail(`${name} is relative, not absolute`)
+}
+for (const [name, value] of Object.entries(meta)) {
+  if (name === 'themeColour' || value === null) continue
+  if (!value.startsWith(SITE_URL)) fail(`${name} does not point at ${SITE_URL}`)
+}
+
+if (!isDeployedRun) {
+  const robots = await (await fetch(`${origin}/robots.txt`)).text()
+  if (!/^User-agent:\s*\*/m.test(robots)) fail('robots.txt names no user agent')
+  if (!/^Allow:\s*\/\s*$/m.test(robots)) fail('robots.txt allows nothing')
+  if (/^Disallow:\s*\S+/m.test(robots)) fail('robots.txt disallows something')
+  if (!robots.includes(`Sitemap: ${SITE_URL}${TOOL_PATH}sitemap.xml`)) {
+    fail('robots.txt does not point at this tool’s sitemap')
+  }
+
+  const licence = await fetch(`${origin}/LICENSE`)
+  if (!licence.ok) fail('GET /LICENSE did not succeed, so the footer links nothing')
+  else if (!(await licence.text()).includes('Apache License')) {
+    fail('/LICENSE is served but does not contain the Apache License')
+  }
+}
+
+const footer = await page.locator('footer.site-footer').innerText()
+for (const phrase of ['Apache License, Version 2.0', 'Modi', 'Ligant AI Incorporated', '3675 Market Street', 'hello@ligant.ai', APP_VERSION]) {
+  if (!footer.includes(phrase)) fail(`the footer does not state ${phrase}`)
+}
+if (footer.includes('theLICENSE')) fail('the LICENSE link has swallowed the space beside it')
+if ((await page.locator('footer.site-footer a[href$="LICENSE"]').count()) === 0) {
+  fail('the footer does not link the LICENSE it asserts')
+}
+
+// The claim about the deployed address, and the flag that gates it.
+if (NETWORK_CLAIM_VERIFIED && !isDeployedRun) {
+  fail(
+    'NETWORK_CLAIM_VERIFIED is set but this was a local run. The strong claim cannot go live on ' +
+      'the strength of a local run: re-run this script against the deployed address.',
+  )
+}
+if (!NETWORK_CLAIM_VERIFIED && footer.includes('has been verified at its deployed address')) {
+  fail('the footer claims a deployed-address verification that has not been recorded')
+}
+
+/* ---------------------------------------------------------------------- *
+ * The typefaces are here, and they are ours                                *
+ * ---------------------------------------------------------------------- */
+const fonts = await page.evaluate(async () => {
+  await document.fonts.ready
+  return {
+    inter: document.fonts.check('16px Inter'),
+    plex: document.fonts.check('16px "IBM Plex Mono"'),
+  }
+})
+
+await browser.close()
+if (server !== null) server.close()
+
+/* ---------------------------------------------------------------------- */
+
+let failed = false
+
+if (foreign.length > 0) {
+  console.error(`FAIL: the page contacted ${foreign.length} external origin(s):`)
+  for (const request of foreign) console.error(`  ${request}`)
+  failed = true
+}
+if (!fonts.inter || !fonts.plex) {
+  console.error('FAIL: a self-hosted typeface did not load.')
+  console.error(`  Inter: ${fonts.inter}, IBM Plex Mono: ${fonts.plex}`)
+  failed = true
+}
+if (failures.length > 0) {
+  console.error(`FAIL: ${failures.length} regression(s):`)
+  for (const failure of failures) console.error(`  ${failure}`)
+  failed = true
+}
+
+if (failed) process.exit(1)
+
+console.log(
+  `Network check passed against ${isDeployedRun ? 'the deployed address' : 'the build artefact'}, at ${pageUrl}.\n` +
+    'The page requested nothing from any origin but its own. Both self-hosted typefaces loaded.\n' +
+    'Every storage key written is disclosed on the page, nothing survives a reload unmarked, and\n' +
+    'clearing stored data removes the key rather than rewriting it empty. The reference case of\n' +
+    'acceptance 1 renders the values URS section 16 states, C4-FL-03 names its points and marks\n' +
+    'their rows, and the failure classes, the constants register and the three convention\n' +
+    'statements are all on the page.\n' +
+    layoutNote +
+    '\n' +
+    (isDeployedRun
+      ? 'ACCEPTANCE TEST 17: PASSED. Set NETWORK_CLAIM_VERIFIED in src/lib/site.ts and redeploy.'
+      : 'ACCEPTANCE TEST 17 IS NOT SATISFIED BY THIS RUN. It asks for the deployed address, which a\n' +
+        'local server cannot stand in for. Deploy, then run:\n' +
+        `  node scripts/check-network.mjs ${SITE_URL}${TOOL_PATH}`),
+)
