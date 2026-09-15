@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { LigantLockup } from '../LigantMark'
-import { TOOLS, TOOL_PATH } from '../../lib/site'
+import { TOOLS, TOOL_PATH, absoluteUrl } from '../../lib/site'
 
 /**
  * The page's identity, and the way out of it.
@@ -10,6 +10,16 @@ import { TOOLS, TOOL_PATH } from '../../lib/site'
  * before there was a second tool. The current tool is a `span` rather than an
  * `a`: there is no link to the page you are already on, and the stylesheet
  * matches on the attribute rather than the element for exactly that reason.
+ *
+ * SIBLING LINKS ARE ABSOLUTE, not root-relative, and that is deliberate: this
+ * page is reachable at more than one origin (the router's
+ * benchtools.ligant.ai and the Pages project's own *.pages.dev), and a
+ * root-relative `/molarity-converter/` resolves against whichever origin the
+ * reader is actually on. From the router that is correct; from the raw Pages
+ * origin it 404s, because that path does not exist on THIS tool's own
+ * project. `absoluteUrl` pins every sibling link to the one address the
+ * suite is actually served from, regardless of which origin this page was
+ * reached through.
  *
  * C4-NF-05 requires this tool to be reachable and usable at its own address
  * independently of any other, including without C1 and C3. These links are a
@@ -36,7 +46,7 @@ export function Masthead({ title, children }: Props) {
               {tool.path === TOOL_PATH ? (
                 <span aria-current="page">{tool.name}</span>
               ) : (
-                <a href={tool.path}>{tool.name}</a>
+                <a href={absoluteUrl(tool.path)}>{tool.name}</a>
               )}
             </li>
           ))}

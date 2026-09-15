@@ -127,6 +127,20 @@ if ((await page.title()) === '') fail('the document has no title')
 const navCurrent = await page.locator('.tool-nav [aria-current="page"]').first().textContent().catch(() => null)
 if (navCurrent === null) fail('the tool switcher does not mark the current tool')
 
+/*
+ * The sibling links must be ABSOLUTE, to https://benchtools.ligant.ai/...,
+ * not root-relative. This page is reachable at more than one origin (the
+ * router, and the Pages project's own *.pages.dev), and a root-relative link
+ * resolves against whichever origin the reader is currently on: correct from
+ * the router, a 404 from the raw Pages origin, since that path does not
+ * exist on this tool's own project.
+ */
+const navHrefs = await page.locator('.tool-nav a').evaluateAll((els) => els.map((el) => el.getAttribute('href')))
+if (navHrefs.length === 0) fail('the tool switcher has no sibling links to check')
+for (const href of navHrefs) {
+  if (!href?.startsWith(SITE_URL)) fail(`a tool-switcher link is not absolute to ${SITE_URL}: ${href}`)
+}
+
 /* ---------------------------------------------------------------------- *
  * The declarations gate: acceptance 13                                     *
  * ---------------------------------------------------------------------- */
