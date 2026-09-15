@@ -1,21 +1,27 @@
 /**
  * A numbered declaration panel that collapses once it has been answered.
  *
- * WHY THIS EXISTS. C4-NF-03 requires the inputs and the full series to fit one
- * screen without scrolling. Measured at twelve points with the full v0.4 input
- * set, the input column alone reaches about 1700px, and it reaches that height
- * WHATEVER THE POINT COUNT IS, because it is made of twelve fields and their
- * declarations rather than of the series. The remedy URS open item 7 prescribes,
- * reducing the point cap, therefore cannot close the gap on its own: at two
- * points the column is exactly as tall as at twelve.
+ * WHY THIS EXISTS. Measured at twelve points with the full input set, the
+ * input column alone reaches about 1700px WHATEVER THE POINT COUNT IS,
+ * because it is made of twelve fields and their declarations rather than of
+ * the series; reducing the point cap therefore cannot close that gap on its
+ * own, at two points the column is exactly as tall as at twelve. Dropping a
+ * declaration is not an option either: the declarations are the tool.
  *
- * The other remedy the URS forbids is dropping a declaration, and rightly: the
- * declarations are the tool.
- *
- * So the declarations stay and the SPACE THEY OCCUPY WHEN ALREADY ANSWERED goes.
- * A completed panel collapses to its heading plus a summary of what was
+ * So the declarations stay and the SPACE THEY OCCUPY WHEN ALREADY ANSWERED
+ * goes. A completed panel collapses to its heading plus a summary of what was
  * declared, so every value remains on screen and readable, and reopens on a
  * click. Nothing is hidden: a collapsed panel shows its answers, not a tick.
+ *
+ * C4-NF-03, restated at v0.5, is the reason this collapse has to hold up under
+ * scrolling and not just under a static screenshot: a series point is never
+ * read apart from the declarations and flags it was designed under. This
+ * panel lives in `.stack`, a column the sticky rail (the series, the flags)
+ * does not travel with, so its collapsed summary being on screen proves
+ * nothing about what is on screen once the reader has scrolled past it. The
+ * `retained` badge here is a courtesy for the column the reader is actually
+ * looking at; the property NF-03 requires is carried by `.rail-declarations`
+ * in `SeriesTable.tsx`, which repeats these same values inside the rail.
  *
  * THE GROUND RULE IS PRESERVED. Method is chosen before data entry, and the
  * panels are ordered so that a user cannot reach a computation without having
@@ -40,10 +46,16 @@ interface Props {
    * result to collapse in favour of.
    */
   complete: boolean
+  /**
+   * True if any field in this panel still holds a value carried over from a
+   * previous session and not yet confirmed or edited in this one. Shown only
+   * while collapsed: an expanded panel already marks the field itself.
+   */
+  retained?: boolean
   children: ReactNode
 }
 
-export function DeclarationPanel({ step, title, summary, complete, children }: Props) {
+export function DeclarationPanel({ step, title, summary, complete, retained = false, children }: Props) {
   // Null until the reader expresses a preference, after which theirs wins. A
   // panel the reader deliberately opened must not close itself again.
   const [open, setOpen] = useState<boolean | null>(null)
@@ -55,6 +67,7 @@ export function DeclarationPanel({ step, title, summary, complete, children }: P
         <div className="titles">
           <span className="step">{step}</span>
           <h2>{title}</h2>
+          {!expanded && retained && <span className="retained-marker">retained</span>}
         </div>
         {complete && (
           <button

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Masthead } from './components/shared/Masthead'
 import { SiteFooter } from './components/shared/SiteFooter'
 import { SkipLink } from './components/shared/SkipLink'
@@ -13,14 +13,22 @@ import {
   hasContent,
   missingDeclarations,
   panelCompletion,
+  reconcileTopPoint,
   toSeriesInputs,
   type FormState,
 } from './lib/form'
 import { formatSigFigs } from './lib/format'
 import { SCOPE_STATEMENT } from './lib/flags'
-import { MAX_POINTS, MIN_POINTS, SUGGESTED_PIPETTING_MINIMUM_UL, type ImportedMolecularWeight } from './lib/normalise'
+import {
+  MAX_POINTS,
+  MIN_POINTS,
+  SUGGESTED_PIPETTING_MINIMUM_UL,
+  acceptedTopPointForms,
+  type ImportedMolecularWeight,
+} from './lib/normalise'
 import {
   NOTHING_RETAINED,
+  RETAINABLE_FIELDS,
   STORAGE_KEY,
   confirmField,
   persist,
@@ -53,6 +61,22 @@ import {
 import type { TopPointForm } from './lib/normalise'
 
 /**
+ * The top-point form select's options, in display order.
+ *
+ * Filtered by `acceptedTopPointForms` rather than duplicating its gate: this
+ * is the second place the accepted set was previously reimplemented inline,
+ * and the divergence between this list and `reconcileTopPoint`'s own check is
+ * what let the select go out of sync with the state under C4-ST-04.
+ */
+const TOP_FORM_OPTIONS: readonly { form: TopPointForm; label: string }[] = [
+  { form: 1, label: 'volume of stock per test, µL' },
+  { form: 2, label: 'mass per test, µg' },
+  { form: 3, label: 'concentration in the stain, µg/mL' },
+  { form: 5, label: 'mass per 10⁶ cells, µg' },
+  { form: 4, label: 'dilution factor from stock' },
+]
+
+/**
  * Which form field, if any, corresponds to each persisted key.
  *
  * The retention marker is per field (C4-ST-03), so a restore has to know which
@@ -74,10 +98,10 @@ const FIELD_OF: Partial<Record<keyof FormState, RetainableField>> = {
   points: 'points',
 }
 
-function loadForm(): { form: FormState; retained: RetainedFields } {
+function loadForm(): { form: FormState; retained: RetainedFields; topPointNeedsReentry: boolean } {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw === null) return { form: EMPTY_FORM, retained: NOTHING_RETAINED }
+    if (raw === null) return { form: EMPTY_FORM, retained: NOTHING_RETAINED, topPointNeedsReentry: false }
     const restored = restoreInputs(JSON.parse(raw), EMPTY_FORM)
     const held: Partial<Record<RetainableField, boolean>> = {}
     for (const [key, field] of Object.entries(FIELD_OF) as [keyof FormState, RetainableField][]) {
@@ -86,9 +110,14 @@ function loadForm(): { form: FormState; retained: RetainedFields } {
       // field teaches the reader that the badge means nothing.
       if (typeof value === 'string' && value.trim() !== '') held[field] = true
     }
-    return { form: restored, retained: retainedOnRestore(held) }
+    // C4-ST-04. A document written before this rule existed, or edited by
+    // hand, can hold a topForm that no longer matches stockKind. Corrected on
+    // load rather than trusted, the same as the interactive change.
+    const { form: reconciled, invalidated } = reconcileTopPoint(restored)
+    if (invalidated) held.topPoint = false
+    return { form: reconciled, retained: retainedOnRestore(held), topPointNeedsReentry: invalidated }
   } catch {
-    return { form: EMPTY_FORM, retained: NOTHING_RETAINED }
+    return { form: EMPTY_FORM, retained: NOTHING_RETAINED, topPointNeedsReentry: false }
   }
 }
 
@@ -96,6 +125,17 @@ function loadForm(): { form: FormState; retained: RetainedFields } {
 function Retained({ when }: { when: boolean }) {
   if (!when) return null
   return <span className="retained-marker">retained</span>
+}
+
+/**
+ * C4-ST-04. Shown against the top point when its declared form stopped being
+ * computable under the stock declaration and was cleared rather than
+ * relabelled. Distinct from `Retained`: this field was not carried over, it
+ * was emptied because what it held no longer means anything.
+ */
+function NeedsReentry({ when }: { when: boolean }) {
+  if (!when) return null
+  return <span className="reentry-marker">cleared, needs re-entry</span>
 }
 
 /**
@@ -160,9 +200,24 @@ export default function App() {
   const initial = useMemo(loadForm, [])
   const [form, setForm] = useState<FormState>(initial.form)
   const [retained, setRetained] = useState<RetainedFields>(initial.retained)
+  const [topPointNeedsReentry, setTopPointNeedsReentry] = useState(initial.topPointNeedsReentry)
   const [imported, setImported] = useState<ImportedMolecularWeight | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+
+  /**
+   * C4-NF-03. `.series-sticky` (the declaration line and the flag list) stays
+   * stuck only as long as its containing block extends below the viewport; a
+   * sticky element unsticks near its container's own bottom edge, which,
+   * with nothing after the table, arrives before the last few rows have had
+   * a chance to reach the viewport under the sticky block. The spacer placed
+   * after the table gives the container that much extra room, measured
+   * rather than guessed, because how much room is needed depends on the flag
+   * text, which depends on the declarations, which this page does not
+   * control.
+   */
+  const stickyRef = useRef<HTMLDivElement | null>(null)
+  const [stickyHeight, setStickyHeight] = useState(0)
 
   /**
    * C4-ST-06. An imported object arrives in the URL FRAGMENT, which a browser
@@ -207,10 +262,25 @@ export default function App() {
   const summaries = panelSummaries(form)
   const complete = panelCompletion(form)
   const missing = missingDeclarations(form)
-  const inputs = toSeriesInputs(form, imported)
+  const retainedFieldList = RETAINABLE_FIELDS.filter((field) => retained[field])
+  const inputs = toSeriesInputs(form, imported, retainedFieldList)
   const outcome: Outcome | null = inputs === null ? null : computeSeries(inputs)
   const result = outcome !== null && outcome.ok ? outcome : null
   const rejections = outcome !== null && !outcome.ok ? outcome.rejections : []
+
+  // Re-attaches only on mount/unmount of `.series-sticky`; the observer then
+  // tracks every subsequent size change (a longer flag list, a wider value)
+  // on its own, without the effect needing to re-run.
+  useEffect(() => {
+    const el = stickyRef.current
+    if (el === null) {
+      setStickyHeight(0)
+      return
+    }
+    const observer = new ResizeObserver((entries) => setStickyHeight(entries[0].contentRect.height))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [result !== null])
 
   const clearStorage = () => {
     try {
@@ -220,6 +290,7 @@ export default function App() {
     }
     setForm(EMPTY_FORM)
     setRetained(NOTHING_RETAINED)
+    setTopPointNeedsReentry(false)
   }
 
   const copyForNotebook = async () => {
@@ -253,13 +324,26 @@ export default function App() {
               title="Antibody stock"
               summary={summaries.stock}
               complete={complete.stock && result !== null}
+              retained={retained.stockConcentration || retained.stockSource || retained.stockMassBasis}
             >
                 <div className="field">
                   <label htmlFor="stock-kind">Concentration</label>
                   <select
                     id="stock-kind"
                     value={form.stockKind}
-                    onChange={(e) => set('stockKind')(e.target.value as FormState['stockKind'])}
+                    onChange={(e) => {
+                      const stockKind = e.target.value as FormState['stockKind']
+                      const { form: reconciled, invalidated } = reconcileTopPoint({
+                        ...form,
+                        stockKind,
+                      })
+                      setForm(reconciled)
+                      if (invalidated) {
+                        setRetained((current) => confirmField(current, 'topPoint'))
+                        setTopPointNeedsReentry(true)
+                      }
+                      setCopied(false)
+                    }}
                   >
                     <option value="stated">stated by the vendor</option>
                     <option value="not-stated-by-vendor">
@@ -357,6 +441,7 @@ export default function App() {
               title="Vendor recommendation"
               summary={summaries.vendor}
               complete={complete.vendor && result !== null}
+              retained={retained.vendorBasis || retained.vendorAmount || retained.vendorTestVolume || retained.vendorCellNumber}
             >
                 <div className="field">
                   <label htmlFor="vendor-basis">
@@ -511,7 +596,7 @@ export default function App() {
                       <div className="field-row">
                         <div className="field">
                           <label htmlFor="vendor-cells">
-                            Cells per test <Retained when={retained.vendorCellNumber} />
+                            Vendor's stated cells per test <Retained when={retained.vendorCellNumber} />
                           </label>
                           <input
                             id="vendor-cells"
@@ -547,6 +632,7 @@ export default function App() {
               title="Staining context"
               summary={summaries.context}
               complete={complete.context && result !== null}
+              retained={retained.stainingVolume || retained.cellNumber || retained.pipettingMinimum}
             >
                 <div className="field-row">
                   <div className="field">
@@ -645,18 +731,23 @@ export default function App() {
               title="Series design"
               summary={summaries.design}
               complete={complete.design && result !== null}
+              retained={retained.topPoint || retained.dilutionFactor || retained.points}
             >
                 <div className="field-row">
                   <div className="field">
                     <label htmlFor="top-value">
-                      Top point <Retained when={retained.topPoint} />
+                      Top point <Retained when={retained.topPoint} />{' '}
+                      <NeedsReentry when={topPointNeedsReentry} />
                     </label>
                     <input
                       id="top-value"
                       type="text"
                       inputMode="decimal"
                       value={form.topValue}
-                      onChange={(e) => set('topValue')(e.target.value)}
+                      onChange={(e) => {
+                        set('topValue')(e.target.value)
+                        setTopPointNeedsReentry(false)
+                      }}
                     />
                   </div>
                   <div className="field">
@@ -664,17 +755,18 @@ export default function App() {
                     <select
                       id="top-form"
                       value={form.topForm}
-                      onChange={(e) => set('topForm')(Number(e.target.value) as TopPointForm)}
+                      onChange={(e) => {
+                        set('topForm')(Number(e.target.value) as TopPointForm)
+                        setTopPointNeedsReentry(false)
+                      }}
                     >
-                      <option value={1}>volume of stock per test, µL</option>
-                      {form.stockKind === 'stated' && (
-                        <>
-                          <option value={2}>mass per test, µg</option>
-                          <option value={3}>concentration in the stain, µg/mL</option>
-                          <option value={5}>mass per 10⁶ cells, µg</option>
-                        </>
-                      )}
-                      <option value={4}>dilution factor from stock</option>
+                      {TOP_FORM_OPTIONS.filter((option) =>
+                        acceptedTopPointForms(form.stockKind).includes(option.form),
+                      ).map((option) => (
+                        <option key={option.form} value={option.form}>
+                          {option.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -683,6 +775,13 @@ export default function App() {
                   it works out to is derived and shown below, and is recomputed whenever anything
                   else changes.
                 </p>
+                {topPointNeedsReentry && (
+                  <p className="hint">
+                    The top point was cleared: its form stopped being computable when the stock
+                    declaration last changed. Re-enter it in a form the current stock declaration
+                    supports.
+                  </p>
+                )}
 
                 <div className="field-row">
                   <div className="field">
@@ -720,12 +819,17 @@ export default function App() {
                 <RejectionList rejections={[...rejectionFor('dilution-factor'), ...rejectionFor('points'), ...rejectionFor('top-point')]} />
             </DeclarationPanel>
 
-            <Method result={result} storageKeys={[STORAGE_KEY]} onClearStorage={clearStorage} />
+            <Method
+              result={result}
+              storageKeys={[STORAGE_KEY]}
+              onClearStorage={clearStorage}
+              importAttempted={imported !== null || importError !== null}
+            />
           </div>
 
           {/* ---------------- results ---------------- */}
           <div className="rail">
-            <section className="panel">
+            <section className="panel panel-series">
               <div className="panel-head">
                 <div className="titles">
                   <h2>The series</h2>
@@ -772,15 +876,74 @@ export default function App() {
 
                 {result !== null && (
                   <>
+                    {/*
+                      C4-NF-03 as restated at v0.5, and C4-NF-07: a series
+                      point is never read apart from the declarations and
+                      flags it was designed under. `.series-sticky` pins this
+                      block to the top of the viewport for as long as any row
+                      of the table below it is in view, under window scroll,
+                      so the property holds regardless of how many rows or how
+                      much flag text a given series has. Retained/default
+                      marks are C4-ST-03's other half: a reader must not read
+                      a row under a value carried from a previous session, or
+                      pre-filled by a suggestion, without being told so where
+                      the row itself is visible.
+                    */}
+                    <div className="series-sticky" ref={stickyRef}>
+                      <dl className="rail-declarations">
+                        <div>
+                          <dt>Staining volume</dt>
+                          <dd>
+                            {formatSigFigs(result.normalised.stainingVolumeUl)} {UNIT_LABEL.uL}, final
+                            <Retained when={retained.stainingVolume} />
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Cells per test</dt>
+                          <dd>
+                            {formatSigFigs(result.normalised.cells)}
+                            <Retained when={retained.cellNumber} />
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Vendor basis</dt>
+                          <dd>
+                            {VENDOR_BASIS_LABEL[result.inputs.vendor.basis]}
+                            <Retained when={retained.vendorBasis} />
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Stock mass basis</dt>
+                          <dd>
+                            {result.inputs.stock.kind === 'stated'
+                              ? STOCK_MASS_BASIS_LABEL[result.inputs.stock.massBasis]
+                              : 'not stated by the vendor'}
+                            <Retained when={retained.stockMassBasis} />
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Pipetting minimum</dt>
+                          <dd>
+                            {formatSigFigs(result.normalised.pipettingMinimumUl)} {UNIT_LABEL.uL},{' '}
+                            {result.inputs.pipettingMinimum.provenance === 'entered' ? 'entered' : 'suggested default'}
+                            <Retained when={retained.pipettingMinimum} />
+                          </dd>
+                        </div>
+                      </dl>
+                      <FlagList flags={result.flags} />
+                      {result.flags.length === 0 && (
+                        <p className="hint">
+                          No flags raised. The declarations are consistent and every point can be
+                          pipetted from stock. That is not a statement that this series brackets the
+                          optimum, which this tool cannot determine.
+                        </p>
+                      )}
+                    </div>
                     <SeriesTable result={result} />
-                    <FlagList flags={result.flags} />
-                    {result.flags.length === 0 && (
-                      <p className="hint">
-                        No flags raised. The declarations are consistent and every point can be
-                        pipetted from stock. That is not a statement that this series brackets the
-                        optimum, which this tool cannot determine.
-                      </p>
-                    )}
+                    {/* Runway for `.series-sticky` to stay stuck through the last
+                        row; see the effect above for why it is measured, not
+                        fixed. */}
+                    <div aria-hidden="true" style={{ height: stickyHeight }} />
                   </>
                 )}
               </div>

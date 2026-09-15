@@ -132,7 +132,21 @@ p  { margin: 0; }
 }
 @media (max-width: 1060px) { .layout { grid-template-columns: minmax(0, 1fr); } }
 
-.rail { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 16px; }
+/*
+ * The rail is NOT sticky. It was, once: `position: sticky; top: 24px` on this
+ * whole column, on the theory that keeping the results level with the
+ * declarations as the reader scrolled the left column was itself most of
+ * C4-NF-03. It is not. `.stack` and `.rail` are two independently-scrolling
+ * columns either way, sticky or not, and a series point read while the rail
+ * is stuck several thousand pixels into a scrolled page is still read apart
+ * from a declaration sitting in a column that scrolled past long ago. The
+ * property NF-03 actually requires is carried by `.series-sticky` in
+ * `SeriesTable.tsx`, which sticks the declaration line and the flag list
+ * themselves, scoped to the table they describe, so they stay in view for as
+ * long as any row of THAT table does, under ordinary window scroll and
+ * nothing else.
+ */
+.rail { display: flex; flex-direction: column; gap: 16px; }
 
 /* One column: inputs, then results, then method.
  *
@@ -141,15 +155,6 @@ p  { margin: 0; }
  * two cannot be interleaved while one is nested inside the other. Flattening
  * the column with `display: contents` promotes its panels to layout children,
  * which `order` can then arrange.
- *
- * The alternative, making the method section a grid child of its own, is what
- * this replaces: the rail then had to span both grid rows to stay sticky, and a
- * spanning item is sized across the rows it spans, so the grid inflated the
- * first row to absorb a tall rail and opened several hundred pixels of empty
- * space between the settings and the method section on a wide screen.
- *
- * Sticky is dropped here, since there is nothing beside the rail to stay level
- * with, and the gap comes from the layout now that the column is flattened.
  */
 @media (max-width: 1060px) {
   .layout { gap: 16px; }
@@ -157,7 +162,7 @@ p  { margin: 0; }
      column to flex is declared later in the file and would otherwise win on
      source order at equal specificity. */
   .layout > .stack { display: contents; }
-  .layout > .rail { position: static; order: 1; }
+  .layout > .rail { order: 1; }
   .layout .method-panel { order: 2; }
 }
 
@@ -909,6 +914,72 @@ th .guidance-pin-button { text-transform: none; }
 /* Wide content scrolls inside its own container rather than being clipped. */
 .table-scroll { overflow-x: auto; }
 
+/* C4-NF-03 as restated at v0.5: a series point is never read apart from the
+ * declarations and flags it was designed under.
+ *
+ * Bounding the table's own scroll region used to live here, on the theory
+ * that keeping the table (and so the whole sticky rail) short enough to fit
+ * one screen was the fix. It was not, on two counts Nadira's review found
+ * together: the declaration summaries live in `.stack`, a column the rail
+ * does not share and does not move with, so the fix was never addressing the
+ * column that actually goes missing; and bounding the table's OWN scroll
+ * region means a row's visibility depends on where that region's scrollbar
+ * happens to be, not on window scroll, which is what acceptance 25 measures
+ * and what an actual reader actually does.
+ *
+ * A twelve-point series with several flagged points does not fit above one
+ * viewport, full stop: the row count is fixed by the declared series length
+ * and the flag text is fixed by how many points it must name, and neither is
+ * this page's to shorten. Bounding the TABLE was an attempt to buy the whole
+ * block back under one screen by making the rows the part that gives; the
+ * actual remedy makes the DECLARATION LINE AND THE FLAG LIST the part that
+ * stays put instead, `position: sticky` scoped to the table they sit above,
+ * so that for as long as any row of THIS table is in the viewport, under
+ * ordinary window scroll and nothing else, they are too. The rows scroll
+ * underneath them, in full, reachable one after another exactly as the page
+ * is scrolled; nothing about the table itself is bounded or clipped.
+ */
+/* `.panel`'s `overflow: hidden` (below, for the rounded corners) also makes
+ * the panel itself the sticky positioning context: with nothing forcing it
+ * open, a sticky child can only move within the panel's OWN box, which is
+ * clipped to fit its content exactly, leaving no room for it to reach the
+ * viewport's true top and defeating the point. This panel is the one place
+ * that needs the child to track the viewport instead, so it alone trades the
+ * corner clipping for it. `.series-sticky` carries its own background so
+ * table rows scrolling underneath do not show through, but it only ever
+ * renders below `.panel-head`, well clear of the panel's own rounded top
+ * corner, so nothing here is actually at risk of bleeding past it.
+ */
+.panel-series { overflow: visible; }
+
+.series-sticky {
+  position: sticky;
+  top: 16px;
+  z-index: 2;
+  background: var(--surface);
+  padding-top: 2px;
+}
+
+/* The declaration line at the top of the sticky block, C4-NF-03's other
+ * half: staining volume, cell number, vendor basis, stock mass basis and
+ * pipetting minimum, the same five values C4-NF-07 requires of a collapsed
+ * panel summary, repeated here because this is the column that actually
+ * scrolls past a row.
+ */
+.rail-declarations {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 16px;
+  row-gap: 3px;
+  margin: 0 0 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--grid);
+  font-size: 11.5px;
+}
+.rail-declarations > div { display: flex; gap: 4px; align-items: baseline; }
+.rail-declarations dt { margin: 0; color: var(--text-muted); font-family: var(--font); }
+.rail-declarations dd { margin: 0; color: var(--text-secondary); }
+
 /* A caption names the table for assistive technology without occupying space. */
 table caption {
   position: absolute;
@@ -1046,11 +1117,13 @@ table caption {
   font-weight: 600;
 }
 
-/* A value carried across a reload, and the one pre-filled suggestion. Both are
-   amber because both are a decision the reader has not made yet: one is a
-   declaration they did not make in this session, the other a number the tool
-   proposed. Neither is a warning. */
-.retained-marker, .suggestion-marker {
+/* A value carried across a reload, the one pre-filled suggestion, and a top
+   point cleared because its form stopped being computable. All three are
+   amber because all three are a decision the reader has not made yet: one is
+   a declaration they did not make in this session, one a number the tool
+   proposed, and one a value the tool would not relabel on their behalf. None
+   is a warning. */
+.retained-marker, .suggestion-marker, .reentry-marker {
   display: inline-block;
   margin-left: 6px;
   padding: 1px 6px;
@@ -1102,8 +1175,11 @@ table caption {
 }
 
 /* A completed declaration, shown as what was declared rather than as a tick.
- * The layout remedy of C4-NF-03: the declaration stays on screen, the fields
- * that captured it do not. */
+ * The C4-NF-07 accommodation: the declaration stays on screen, the fields
+ * that captured it do not. C4-NF-03 itself is carried by `.series-sticky`,
+ * not by this collapse; this panel lives in `.stack`, a column the sticky
+ * rail does not travel with, so its `retained-marker` here is a courtesy for
+ * the reader looking at this column, not the property NF-03 requires. */
 .panel-collapsed .panel-head { border-bottom: none; }
 .panel-summary {
   padding: 0 16px 13px 46px;

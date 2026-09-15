@@ -184,7 +184,7 @@ export const VENDOR_BASIS_LABEL: Readonly<Record<VendorBasis, string>> = {
   'per-test-volume-stated': 'per test, with the test volume stated by the vendor',
   'per-test-volume-not-stated': 'per test, test volume not stated by the vendor',
   'final-concentration':
-    'as a final concentration (µg/mL, or a dilution factor from stock under the C4-UN-08 convention)',
+    'as a final concentration (µg/mL, or a dilution factor from stock, where a dilution of 1 in 100 is a factor of 100)',
   none: 'no vendor recommendation used',
 }
 

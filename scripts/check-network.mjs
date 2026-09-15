@@ -100,7 +100,10 @@ const browser = await chromium.launch({
   // Playwright manages. CI installs that browser itself.
   executablePath: process.env.CHROME_PATH,
 })
-const page = await browser.newPage({ viewport: { width: 1366, height: 768 } })
+// URS open item 11, closed at v0.5: the reference viewport is 1366 x 650 CSS
+// px. See the `reference-viewport` register row for the browser configuration
+// this figure is measured against.
+const page = await browser.newPage({ viewport: { width: 1366, height: 650 } })
 
 const foreign = []
 page.on('request', (request) => {
@@ -241,13 +244,15 @@ for (const phrase of [
   'Dilution factor',
   'Staining volume',
   'Round-trip tolerance',
+  'Unit-normalisation tolerance',
   'Ratio-test tolerance',
-  // Acceptance 21 asks the page to state which constants are uncharacterised.
-  // Measured but not yet accepted is its own state and is the one these two are
-  // in: the figure is the developer's and the decision is not, so the register
-  // must say so rather than present either as settled.
-  'AWAITING SIGN-OFF',
-  'MEASURED, NOT YET ACCEPTED',
+  'Ratio-test sensitivity',
+  'C4-NF-03 conformance',
+  // C4-CN-01 as amended at v0.5: a tolerance listed as derived is the
+  // analytic bound over the stated operation set, and the page must not
+  // state a decision (sign-off) that has not been made.
+  'Analytic bound:',
+  'OPEN, URS open item 6',
   'Displayed precision matches the resolution of the physical act the number drives',
 ]) {
   if (!body.includes(phrase)) fail(`the constants register does not state ${phrase}`)
@@ -259,6 +264,7 @@ for (const [what, phrase] of [
   ['C4-OUT-11, the dilution convention', 'final volume divided by stock volume'],
   ['C4-OUT-07, the precision and rounding rule', 'rounded half away from zero'],
   ['C4-OUT-08, what the tool does not verify', 'does not verify what was prepared'],
+  ['C4-IV-05, the ratio test\'s blind spot', 'one rounding per step is invisible to it'],
 ]) {
   if (!body.includes(phrase)) fail(`${what} is not stated on the page`)
 }
@@ -274,8 +280,29 @@ for (const phrase of ['Cell density', 'Stock provenance', 'Stock mass basis', 'V
 if (!wholePage.includes(APP_VERSION)) fail('the engine version is not stated on the output')
 
 /* ---------------------------------------------------------------------- *
- * Acceptance 25 and C4-NF-03: the layout, measured rather than asserted     *
- * ---------------------------------------------------------------------- */
+ * Acceptance 25 and C4-NF-03, as restated at v0.5: a series point is never  *
+ * read apart from the declarations and flags it was designed under.        *
+ * ---------------------------------------------------------------------- *
+ *
+ * FOURTEEN WINDOW-SCROLL POSITIONS, per acceptance 25 as amended: the page
+ * scrolled to its own top, to its own bottom, and with each of the twelve
+ * rows aligned to the bottom edge of the viewport. WINDOW scroll and nothing
+ * else: an earlier version of this check scrolled `.series-scroll`, the
+ * table's own internal region, and never drove window scroll at all, which
+ * is exactly how a real failure got certified MET here and then found by
+ * Nadira's own review instead. There is no region left to scroll against:
+ * the table renders at its natural height, and the declaration line and the
+ * flag list (`.series-sticky` in App.tsx) are pinned to the viewport by
+ * `position: sticky`, scoped to the table they sit above, for as long as any
+ * row of it remains in view under ordinary window scroll.
+ *
+ * A position where NO row is in view at all is not a position C4-NF-03 makes
+ * a claim about: on this page, both "top" (the table sits well below the
+ * masthead and the declarations) and "bottom" (well below the table, past
+ * the derivation and structured-result panels) are exactly that, so they
+ * pass without a decl/flag check. The check applies only where a series
+ * point is actually being read, which is the property being measured.
+ */
 await expandPanel(4)
 if ((await page.locator('#points').count()) === 0) {
   fail('a collapsed declaration panel could not be reopened')
@@ -283,25 +310,76 @@ if ((await page.locator('#points').count()) === 0) {
   await page.fill('#points', '12')
   await page.waitForTimeout(200)
 }
-const layout = await page.evaluate(() => {
-  const panels = [...document.querySelectorAll('.stack > .panel:not(.method-panel)')]
-  const last = panels[panels.length - 1]
-  const rail = document.querySelector('.rail .panel:first-child')
-  const bottom = (el) => (el ? Math.round(el.getBoundingClientRect().bottom + window.scrollY) : 0)
-  return { inner: window.innerHeight, inputs: bottom(last), series: bottom(rail) }
-})
-const needed = Math.max(layout.inputs, layout.series)
-// NOT A FAILURE. C4-NF-03 is declared unmet in the constants register, with
-// its measurements, and the register is the disclosure surface for a
-// requirement the tool does not meet. Failing the build here would make the
-// deviation undeclarable rather than making it go away. It is printed on every
-// run so the number cannot drift unnoticed.
+
+const rowCount = await page.locator('.series-table tbody tr').count()
+if (rowCount !== 12) fail(`the series has ${rowCount} rows, expected 12 for acceptance 25`)
+
+const fullyVisible = (rect, vh) => rect !== null && rect.top >= -0.5 && rect.bottom <= vh + 0.5
+
+async function nf03State() {
+  return page.evaluate(() => {
+    const rectOf = (el) => {
+      if (!el) return null
+      const r = el.getBoundingClientRect()
+      return { top: r.top, bottom: r.bottom }
+    }
+    const rows = [...document.querySelectorAll('.series-table tbody tr')].map(rectOf)
+    return {
+      viewportHeight: window.innerHeight,
+      anyRowVisible: rows.some((r) => r.bottom > 0 && r.top < window.innerHeight),
+      sticky: rectOf(document.querySelector('.series-sticky')),
+    }
+  })
+}
+
+let worstAt = null
+let nf03Failures = 0
+let nf03Checked = 0
+
+async function checkWindowPosition(label) {
+  await page.waitForTimeout(50)
+  const s = await nf03State()
+  // Nothing to protect where nothing is being read.
+  if (!s.anyRowVisible) return
+  nf03Checked += 1
+  const ok = fullyVisible(s.sticky, s.viewportHeight)
+  if (!ok) {
+    nf03Failures += 1
+    if (worstAt === null) worstAt = label
+  }
+}
+
+await page.evaluate(() => window.scrollTo(0, 0))
+await checkWindowPosition('page scrolled to the top')
+
+const maxScroll = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)
+await page.evaluate((y) => window.scrollTo(0, y), maxScroll)
+await checkWindowPosition('page scrolled to the bottom')
+
+for (let i = 0; i < rowCount; i += 1) {
+  // Absolute document position of this row's bottom edge, so the target is
+  // independent of wherever the page currently happens to be scrolled.
+  const target = await page.evaluate((idx) => {
+    const row = document.querySelectorAll('.series-table tbody tr')[idx]
+    const rect = row.getBoundingClientRect()
+    return Math.max(0, rect.bottom + window.scrollY - window.innerHeight)
+  }, i)
+  await page.evaluate((y) => window.scrollTo(0, y), target)
+  await checkWindowPosition(`row ${i + 1} aligned to the bottom edge`)
+}
+
+if (nf03Checked === 0) {
+  fail('acceptance 25 found no window-scroll position at which any series row was in view')
+}
 const layoutNote =
-  `C4-NF-03 at 1366x768, twelve points: content reaches ${needed}px against ${layout.inner}px ` +
-  `available (inputs ${layout.inputs}px, series ${layout.series}px). ` +
-  (needed <= layout.inner ? 'MET.' : 'NOT MET, and declared as an accepted deviation in the register.')
-if (!wholePage.includes('ACCEPTED DEVIATION')) {
-  fail('C4-NF-03 is not met and the register does not declare the deviation')
+  nf03Failures === 0
+    ? `C4-NF-03 at the reference viewport (1366 x 650): MET, under window scroll, at all ${nf03Checked} of acceptance 25's positions where a row was in view.`
+    : `C4-NF-03 at the reference viewport: NOT MET, under window scroll, at ${nf03Failures} of ${nf03Checked} checked positions, first at "${worstAt}".`
+if (nf03Failures > 0) {
+  fail(`C4-NF-03 is not met at ${nf03Failures} of ${nf03Checked} window-scroll acceptance-25 positions (first: ${worstAt})`)
+}
+if (!wholePage.includes('MET at the reference viewport')) {
+  fail('the register does not state the C4-NF-03 conformance result')
 }
 
 /* ---------------------------------------------------------------------- *

@@ -56,6 +56,7 @@ import { PRECISION_STATEMENT } from './format'
 import { TOOL_ID, TOOL_NAME } from './site'
 import { FORMS, FORM_LABEL, type FormId } from './units'
 import type { SeriesInputs } from './normalise'
+import type { RetainableField } from './retention'
 
 export const SCHEMA_NAME = 'ligant-benchtools-c4-series'
 
@@ -67,7 +68,14 @@ export const SCHEMA_NAME = 'ligant-benchtools-c4-series'
  * together would make one of them lie. They move separately and both are on the
  * object. C1 draws the same distinction for the same reason.
  */
-export const SCHEMA_VERSION = '1.0.0'
+/**
+ * Bumped to 1.1.0, 15 September 2026: `declarations.retained` is new
+ * (Nadira's review, item 2). Additive and backward compatible, a consumer
+ * reading a 1.0.0 object never sees it and one reading a 1.1.0 object that
+ * does not know it can ignore it, so this is a minor version, not a major
+ * one; nothing already on the object changed shape.
+ */
+export const SCHEMA_VERSION = '1.1.0'
 
 /** A number that means nothing without its unit, carrying it. C1's shape. */
 export interface Quantity<U extends string = string> {
@@ -156,6 +164,14 @@ export interface StructuredResult {
     pipettingMinimum: Quantity & { provenance: 'entered' | 'default' }
     /** C4-SC-04. Recorded as a declaration; no threshold is applied to it. */
     cellDensity: Quantity
+    /**
+     * C4-ST-03 and C4-NF-07, Nadira's review, item 2. Which declarations this
+     * series was computed under still hold a value restored from a previous
+     * session and not confirmed or edited in this one, alongside the existing
+     * `pipettingMinimum.provenance`. Empty when nothing was retained, which is
+     * the honest state for a series built entirely from this session's input.
+     */
+    retained: readonly RetainableField[]
     imported: {
       molecularWeight: Quantity
       provenance: string
@@ -279,6 +295,7 @@ export function toStructuredResult(result: SeriesResult): StructuredResult {
         provenance: inputs.pipettingMinimum.provenance,
       },
       cellDensity: { value: base.cellsPerUl, unit: 'cells/uL', underflowed: false },
+      retained: inputs.retainedFields ?? [],
       imported:
         inputs.imported === null
           ? null

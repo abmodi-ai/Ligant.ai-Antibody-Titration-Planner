@@ -17,7 +17,7 @@ import type {
   TopPointForm,
   VendorDeclaration,
 } from './normalise'
-import { SUGGESTED_PIPETTING_MINIMUM_UL } from './normalise'
+import { acceptedTopPointForms, SUGGESTED_PIPETTING_MINIMUM_UL } from './normalise'
 import type {
   CellUnit,
   ConcentrationUnit,
@@ -26,6 +26,7 @@ import type {
   VendorBasis,
   VolumeUnit,
 } from './units'
+import type { RetainableField } from './retention'
 
 export interface FormState {
   stockKind: 'stated' | 'not-stated-by-vendor'
@@ -113,6 +114,36 @@ export function parseNumber(raw: string): number | null {
   if (cleaned === '') return null
   const value = Number(cleaned)
   return Number.isFinite(value) ? value : null
+}
+
+/**
+ * C4-ST-04. Keeps `topForm` valid for `stockKind`, whichever of the two just
+ * changed.
+ *
+ * Reproduced against the build: enter a stock concentration, enter the top
+ * point as a concentration (form 3), then switch the stock to "not stated by
+ * vendor". Form 3 needs a stock concentration to resolve to a stock volume,
+ * and once the stock is declared not stated there is none. Leaving `topForm`
+ * at 3 is the uncontrolled-select trap: the `<select>` no longer renders an
+ * option for 3, so it falls back to displaying its first remaining option
+ * while the state still holds 3, and the two disagree on screen. Silently
+ * switching `topForm` to another accepted value would fix the control but
+ * hide the fact that the user's number no longer means what they entered it
+ * to mean.
+ *
+ * So neither happens. The top point is CLEARED and reported as invalidated,
+ * the same treatment C4-ST-04 gives any declaration whose premise changed
+ * under it, rather than a value the tool relabels on the user's behalf.
+ *
+ * Called from both the interactive stock-kind change and a restore from
+ * storage, so the two paths cannot drift apart and a value written before
+ * this rule existed is corrected on load rather than trusted.
+ */
+export function reconcileTopPoint(form: FormState): { form: FormState; invalidated: boolean } {
+  if (acceptedTopPointForms(form.stockKind).includes(form.topForm)) {
+    return { form, invalidated: false }
+  }
+  return { form: { ...form, topForm: 1, topValue: '' }, invalidated: true }
 }
 
 /**
@@ -225,6 +256,7 @@ function topPoint(form: FormState): SeriesInputs['topPoint'] {
 export function toSeriesInputs(
   form: FormState,
   imported: ImportedMolecularWeight | null,
+  retainedFields: readonly RetainableField[] = [],
 ): SeriesInputs | null {
   if (missingDeclarations(form).length > 0) return null
 
@@ -252,6 +284,7 @@ export function toSeriesInputs(
     dilutionFactor: parseNumber(form.dilutionFactor) as number,
     points: parseNumber(form.points) as number,
     imported,
+    retainedFields,
   }
 }
 

@@ -439,36 +439,114 @@ describe('the disclosure lists the page renders', () => {
     expect(UNDETECTABLE_FAILURES.some((f) => f.includes('Matrix transfer'))).toBe(true)
   })
 
-  it('carries the constants register, with every uncharacterised value marked', () => {
-    // Acceptance 21: the page states which are uncharacterised.
-    // Measured but not yet accepted is its own state, and the register must not
-    // collapse it into either "open" or "closed". A row claiming an owner's
-    // decision on her behalf is the silent behaviour-determining choice section
-    // 11 exists to prevent.
-    const awaiting = CONSTANTS_REGISTER.filter((entry) => entry.value.includes('AWAITING SIGN-OFF'))
-    expect(awaiting.map((e) => e.id).sort()).toEqual(['ratio-test-tolerance', 'round-trip-tolerance'])
-    for (const entry of awaiting) {
-      expect(entry.status).toMatch(/MEASURED, NOT YET ACCEPTED/)
-      // The measurement itself is on the page, not only its status.
-      expect(entry.value).toMatch(/\d+ ULP/)
+  it('states no decision that has not been made: three tolerances stay OPEN pending the item 6 record', () => {
+    // C4-CN-01 as amended at v0.5: a tolerance listed as derived is the
+    // analytic bound over the stated operation set, and the register status
+    // vocabulary is derived, measured, disclosed, proposed, or open. The
+    // developer can derive and enforce a bound today; only NADIRA's review of
+    // the derivation record moves a row off OPEN, and the register must not
+    // claim that review on her behalf.
+    const open = CONSTANTS_REGISTER.filter((entry) => entry.status.startsWith('OPEN'))
+    expect(open.map((e) => e.id).sort()).toEqual([
+      'ratio-test-tolerance',
+      'round-trip-tolerance',
+      'unit-normalisation-tolerance',
+    ])
+    for (const entry of open) {
+      // Each still states the analytic figure it derived, not merely that a
+      // figure is pending: the row is honest about sign-off, not about work.
+      expect(entry.value).toMatch(/Analytic bound: \d+ ULP/)
     }
   })
 
+  it('withdraws the sample-maximum ratio-test figure and states the analytic derivation', () => {
+    // A2: the build's earlier 4 ULP figure was a sample maximum, not a
+    // tolerance, and is withdrawn. The replacement is an analytic bound over
+    // every operation in the worst consecutive pair, with the empirical
+    // distribution kept as evidence rather than as the bound itself.
+    const ratio = CONSTANTS_REGISTER.find((e) => e.id === 'ratio-test-tolerance')
+    expect(ratio?.value).toMatch(/Analytic bound: 6 ULP/)
+    expect(ratio?.status).toMatch(/WITHDRAWN/)
+    expect(ratio?.status).toMatch(/9 rounding multiplies/)
+    expect(ratio?.status).toMatch(/3 divisions/)
+  })
+
+  it('gives C4-IV-04 its own derived row, separate from the round-trip figure', () => {
+    const unitNorm = CONSTANTS_REGISTER.find((e) => e.id === 'unit-normalisation-tolerance')
+    expect(unitNorm?.value).toMatch(/Analytic bound: 2 ULP/)
+    expect(unitNorm?.status).toMatch(/separate from the round-trip figure/)
+  })
+
+  it('records the ratio-test sensitivity as measured, pending the item 6 record, and states the blind spot', () => {
+    // C4-IV-05: the measured bound is stated on the page in plain terms, as
+    // the limit of what the ratio test can see.
+    const sensitivity = CONSTANTS_REGISTER.find((e) => e.id === 'ratio-test-sensitivity')
+    expect(sensitivity?.status).toMatch(/^MEASURED/)
+    expect(sensitivity?.status).toMatch(/PENDING THE ITEM 6 RECORD/)
+    expect(sensitivity?.status).toMatch(/one rounding per step is invisible to it/)
+  })
+
   it('records that C1 has not yet adopted the rounding convention', () => {
-    // The divergence found when C1's own register was read: it rounds half to
-    // even and is to adopt half away from zero at its v0.6. Disclosed here
-    // rather than left for a reader to discover by comparing two tools.
+    // Verified by reading C1's own source rather than its register: see the
+    // next test for the stronger claim this became at v0.5.
     const rounding = CONSTANTS_REGISTER.find((e) => e.id === 'rounding-mode')
     expect(rounding?.status).toMatch(/NOT YET ADOPTED IN C1/)
   })
 
-  it('declares the viewport requirement it does not meet', () => {
-    // C1's precedent: a requirement the tool DOES NOT MEET is declared in the
-    // register, because this is the page's disclosure surface and an
-    // undeclared shortfall is exactly what the register exists to prevent.
-    const viewport = CONSTANTS_REGISTER.find((e) => e.id === 'viewport-supported')
-    expect(viewport?.status).toMatch(/ACCEPTED DEVIATION/)
-    expect(viewport?.status).toMatch(/THE POINT CAP IS NOT THE BINDING CONSTRAINT/)
+  it('cites the verified source of the C1 rounding claim, not an assumption about a primitive', () => {
+    // A.B. asked how the claim that C1 rounds half to even was measured. It
+    // was not measured at all: it was verified by reading C1's own source,
+    // which contains deliberate half-to-even code that explicitly rejects
+    // toPrecision for the same reason C4 does. That is a stronger claim than
+    // either "measured" or "assumed", and open item 13(iii) resolves to a
+    // behaviour-change branch as a consequence, stated here rather than left
+    // for a reader to work out.
+    const rounding = CONSTANTS_REGISTER.find((e) => e.id === 'rounding-mode')
+    expect(rounding?.status).toMatch(/VERIFIED BY READING C1.s OWN SOURCE/)
+    expect(rounding?.status).toMatch(/roundHalfEven/)
+    expect(rounding?.status).toMatch(/format\.ts lines 75-97/)
+    expect(rounding?.status).toMatch(/REJECTS `toPrecision`/)
+    expect(rounding?.status).toMatch(/BEHAVIOUR-CHANGE branch/)
+  })
+
+  it('does not claim ADC conformance at a precision the ADC does not use, and says what was actually run', () => {
+    // Nadira's review, item 3a: the prior CONFORMS claim reasoned from the
+    // ECMAScript spec for toFixed/Math.round/toPrecision without running the
+    // ADC's own code, and compared it at 3 significant figures when the
+    // ADC's own formatter uses 2 decimal places for most of its range. The
+    // register cannot say measured for something that was reasoned, and
+    // cannot say conforms at a precision the compared tool never renders at.
+    const rounding = CONSTANTS_REGISTER.find((e) => e.id === 'rounding-mode')
+    expect(rounding?.status).not.toMatch(/MEASURED, NOT ASSUMED, and CONFORMS/)
+    expect(rounding?.status).toMatch(/REWORDED, NOT MEASURED AS CONFORMING/)
+    expect(rounding?.status).toMatch(/resolves away from zero/)
+    expect(rounding?.status).toMatch(/not 3 significant figures/)
+    // C1's own live tie test, item 3c: run, not only read.
+    expect(rounding?.status).toMatch(/CONFIRMED BY RUNNING IT/)
+    expect(rounding?.status).toMatch(/0\.101562 rather than 0\.101563/)
+  })
+
+  it('declares the reference viewport closed at v0.5, with its basis configuration line', () => {
+    const viewport = CONSTANTS_REGISTER.find((e) => e.id === 'reference-viewport')
+    expect(viewport?.value).toBe('1366 × 650 CSS px')
+    expect(viewport?.status).toMatch(/CLOSED at v0\.5/)
+    expect(viewport?.status).toMatch(/Basis configuration:/)
+  })
+
+  it('measures C4-NF-03 conformance under window scroll, not the withdrawn region-scroll check', () => {
+    // A prior MEASURED claim here was wrong: it scrolled `.series-scroll`'s
+    // own region, never the window, and missed the declaration/series split
+    // across two independently-scrolling columns, a failure Nadira's review
+    // found by scrolling the page itself. The register must name the actual
+    // mechanism (`.series-sticky`) and the actual axis (window scroll) rather
+    // than repeat the withdrawn claim.
+    const nf03 = CONSTANTS_REGISTER.find((e) => e.id === 'nf-03-conformance')
+    expect(nf03?.status).toMatch(/^MEASURED/)
+    expect(nf03?.value).toMatch(/MET at the reference viewport/)
+    expect(nf03?.value).toMatch(/window scroll/)
+    expect(nf03?.status).toMatch(/series-scroll/)
+    expect(nf03?.status).toMatch(/series-sticky/)
+    expect(CONSTANTS_REGISTER.some((e) => e.id === 'viewport-supported')).toBe(false)
   })
 
   it('records that the pipetting default is on the behaviour path when unchanged', () => {

@@ -201,6 +201,12 @@ export function computeSeries(inputs: SeriesInputs): Outcome {
   const anchorC = usesConcentration ? anchorConcentration(inputs, base) : null
   const anchorV = usesConcentration ? null : anchorVolumeUl(inputs, base)
 
+  // Both branches below share C4-HI-01: the top point fails to resolve to a
+  // positive quantity before a series exists to evaluate, one anchored on
+  // concentration and the other on volume. C4-HI-06 is a different condition,
+  // evaluated against the COMPUTED SYSTEM by rejectSeries below, once a series
+  // exists to evaluate it against; see validate.ts. The volume branch was
+  // previously tagged C4-HI-06, which conflated the two.
   if (usesConcentration && (anchorC === null || !(anchorC > 0))) {
     return {
       ok: false,
@@ -219,7 +225,7 @@ export function computeSeries(inputs: SeriesInputs): Outcome {
       ok: false,
       rejections: [
         {
-          code: 'C4-HI-06',
+          code: 'C4-HI-01',
           field: 'top-point',
           message:
             'The top point does not resolve to a stock volume greater than zero. Where the vendor states no concentration, the top point has to be entered as a volume per test or as a dilution factor from stock.',

@@ -86,6 +86,16 @@ export const THRESHOLD_EVALUATION_STATEMENT =
   'the displayed value in its last significant figure. A flagged point and an unflagged one ' +
   'can therefore display identically.'
 
+/**
+ * C4-IV-05. The ratio test's own blind spot, stated on the page in plain
+ * terms rather than left in the register for a reader to work out from the
+ * sensitivity figures.
+ */
+export const RATIO_TEST_BLIND_SPOT_STATEMENT =
+  'The series arithmetic is checked by an automated test that compares each consecutive ratio ' +
+  'against the declared dilution factor. That check has a blind spot: a defect smaller than ' +
+  'approximately one rounding per step is invisible to it.'
+
 /* ------------------------------------------------------------------------ */
 /* C4-FL-11: the reportable pairs table                                      */
 /* ------------------------------------------------------------------------ */
@@ -376,14 +386,14 @@ export const UNDETECTABLE_FAILURES: readonly string[] = [
   'A titration performed on a *different cell type, fixation state, or permeabilisation condition* than the experiment it will be applied to.',
   '*Absence of Fc receptor blocking*, which changes apparent staining independently of concentration.',
   '*Which binding regime applies.* Concentration (form 3) transfers where antibody is in excess; mass per cell (form 5) transfers where antibody is depleted by the antigen sink. Which governs depends on antigen density, affinity and cell number. The cell density is recorded and a mismatch with the vendor is flagged; neither quantifies depletion.',
-  'Whether the series *brackets the optimum*. C4-FL-08 fires only where a vendor recommendation with a stated basis was entered, and states only that the recommended point is not bracketed.',
+  'Whether the series *brackets the optimum*. A flag is raised only where a vendor recommendation with a stated basis was entered, and it states only that the recommended point is not bracketed by this series.',
   'Any error in the *preparation* of the series. The tool states the target; it does not observe what was pipetted.',
-  'A *degree of labelling* differing from the lot the recommendation was derived from. C4-FL-09 records that a payload is included but cannot quantify it.',
+  'A *degree of labelling* differing from the lot the recommendation was derived from. A flag records that a payload is included but cannot quantify it.',
   'A staining volume entered as the *volume before antibody addition* rather than the final volume. The term is defined on this page, but the tool cannot verify which the user measured.',
   '*Matrix transfer.* A series titrated on one matrix, whether cells, capture beads, or fixed against live cells, does not establish the optimum on another; surface densities differ by orders of magnitude.',
-  '*Volume accommodation.* Whether the stock volume at the top point can be accommodated alongside the volumes the cells and other reagents arrive in. C4-HI-06 bounds only the stock against the whole.',
+  '*Volume accommodation.* Whether the stock volume at the top point can be accommodated alongside the volumes the cells and other reagents arrive in. The rejection above bounds only the stock volume against the whole staining volume.',
   '*Dilution convention.* A vendor dilution recommendation read under the other convention differs from the reading used here by (f + 1)/f. The tool cannot detect which the vendor meant.',
-  '*Mass-basis mismatch where a basis is unrecorded.* C4-FL-11 withholds the molar form when bases differ or are unrecorded; it cannot tell whether an unrecorded basis would have matched.',
+  '*Mass-basis mismatch where a basis is unrecorded.* The molar form is withheld when the two mass bases differ or are unrecorded; it cannot tell whether an unrecorded basis would have matched.',
   '*Saturation.* The tool cannot determine whether any point in the series saturates the target. A vendor recommendation does not establish saturation: it is a concentration chosen for a stated assay, frequently for separation, and the datasheet does not say which.',
 ] as const
 
@@ -426,7 +436,7 @@ export const CONSTANTS_REGISTER: readonly RegisterEntry[] = [
     value: '12',
     basis: 'inspection',
     status:
-      'Disclosed. Chosen by inspection rather than derived, and bounded by what fits one screen with the full input set: see the layout measurement recorded for open item 7.',
+      'Disclosed. Chosen by inspection, as a round number comfortably above what a bench titration series actually runs, not derived from any arithmetic or layout constraint. Open item 7 is withdrawn at v0.5 and no longer the basis for this figure; see C4-NF-03 as restated, which this row does not depend on.',
   },
   {
     id: 'displayed-precision',
@@ -441,7 +451,7 @@ export const CONSTANTS_REGISTER: readonly RegisterEntry[] = [
     value: 'Half away from zero, applied to the exact stored binary value',
     basis: 'convention',
     status:
-      'Convention, scoped to C1 onward. NOT YET ADOPTED IN C1, which rounds half to even and is to adopt this at its v0.6. The divergence is disclosed here rather than left for a reader to discover by comparing two tools. It is applied to the exact stored value rather than to a decimal rendering: a 2-fold series from a round top point lands on genuine binary ties, and a value that merely prints like a tie is usually not one. Conformance of the shipped Antigen Density Calculator is measured rather than assumed.',
+      'Convention, scoped to C1 onward. NOT YET ADOPTED IN C1, which rounds half to even. VERIFIED BY READING C1’s OWN SOURCE, not assumed from a platform primitive: `roundHalfEven`, `Ligant.ai-Molarity-Converter` v0.1.0, src/lib/format.ts lines 75-97, computes the exact decimal expansion of the stored double and rounds it deliberately, on the stated grounds that this is the IEEE 754 default and the default in Python, R and Julia. Its own header comment explicitly REJECTS `toPrecision` for the opposite reason C4 does: both tools independently concluded a platform primitive cannot be trusted to report which value was really a tie. CONFIRMED BY RUNNING IT, not only by reading it: C1 v0.1.0’s own `formatSigFigs` and `isExactTie`, imported and executed unmodified, find genuine binary ties in its own numeric range at its own six-figure precision, for example 0.1015625; every one checked resolves to the even trailing digit, 0.101562 rather than 0.101563, which is round half to even exactly as the source states. Because the code is deliberate, its adoption of half away from zero at C1 v0.6 (open item 13(iii)) resolves to the BEHAVIOUR-CHANGE branch: an engine-version bump and a re-check of every C1 reference table for ties, not a wording change. The divergence is disclosed here rather than left for a reader to discover by comparing two tools. It is applied to the exact stored value rather than to a decimal rendering: a 2-fold series from a round top point lands on genuine binary ties, and a value that merely prints like a tie is usually not one. THE ADC ROW IS REWORDED, NOT MEASURED AS CONFORMING: the prior CONFORMS claim reasoned from the ECMAScript spec for `toFixed`/`Math.round`/`toPrecision` without ever running the ADC’s own code, which is exactly the distinction this project asks of everyone else. Run since: `Ligant.ai-Antigen-Density-Calculator` v0.1.3’s own `formatNumber`, imported and executed unmodified, against the dyadic values that sit exactly on its own tie points (0.125, 0.375, 0.625, 0.875, 12.25). Every one resolves away from zero (0.13, 0.38, 0.63, 0.88, 12.3), so the ADC’s tie-breaking direction is now actually measured and does agree with C4’s convention. But its DISPLAYED PRECISION is not 3 significant figures for most of what it reports: `formatNumber` uses 2 decimal places from 0.01 to 10 and 1 decimal place from 10 to 100, reaching 3 significant figures only below 0.01, via `toPrecision`, which is not exercised by the values above. CONFORMANCE AT C4’s DISPLAYED PRECISION was therefore never a coherent claim for most of the ADC’s own range; what is now measured, and stated as such, is agreement on which way a tie resolves, not on what precision it is resolved to. Recorded in docs/open-item-16-adc-conformance.md.',
   },
   {
     id: 'dilution-factor',
@@ -470,34 +480,50 @@ export const CONSTANTS_REGISTER: readonly RegisterEntry[] = [
   {
     id: 'round-trip-tolerance',
     label: 'Round-trip tolerance',
-    value: 'Measured at 1 ULP, compared with less than or equal. AWAITING SIGN-OFF',
+    value: 'Analytic bound: 1 ULP, compared with less than or equal',
     basis: 'derived',
     status:
-      'URS open item 6. MEASURED, NOT YET ACCEPTED: the figure is the developer’s and the decision is NADIRA’s, and a register row is not a review. Worst observed error 1.0 ULP over 200,000 cases across eleven decades of concentration, with zero exceedances. This is a REQUIREMENT ON HOW THE CONVERSION IS STRUCTURED rather than an observation about it: the round trip is two operations against one folded constant, because the unit factors are folded at entry. Applied stepwise it would be six operations, and C1 measured that path reaching 3.0 ULP and exceeding a 1 ULP bound in 0.54% of cases. A tool inheriting this row as an observation would fail it. Recorded in docs/open-item-06-derived-tolerances.md.',
+      'OPEN, URS open item 6, pending NADIRA’s review of the derivation record: the figure is the developer’s and the decision is not, and a register row is not a review. The bound is a REQUIREMENT ON HOW THE CONVERSION IS STRUCTURED, not an observation: the round trip is two operations against one folded constant, because the unit factors are folded at entry, and each operation contributes at most half an ULP. Applied stepwise it would be six operations, and C1 measured that path reaching 3.0 ULP and exceeding a 1 ULP bound in 0.54% of cases. Empirical distribution, reported as evidence the bound is not loose and never as the tolerance itself: worst observed error 1.0 ULP over 200,000 cases across eleven decades of concentration, zero exceedances. Recorded in docs/open-item-06-derived-tolerances.md.',
+  },
+  {
+    id: 'unit-normalisation-tolerance',
+    label: 'Unit-normalisation tolerance (C4-IV-04)',
+    value: 'Analytic bound: 2 ULP, compared with less than or equal',
+    basis: 'derived',
+    status:
+      'OPEN, URS open item 6. Its own row and its own derivation, separate from the round-trip figure above: that bound is derived over the round trip ALONE, taking the folded constant as given, while this one is derived over the CONVERSION that produces it, which the round trip does not exercise. A quantity entered in the base unit (µL, µg/mL) carries no conversion rounding, since multiplying by 1 is exact; a quantity entered in mL or mg/mL carries one conversion multiply, at most half an ULP. Comparing a base-unit path against a non-base-unit path sums rather than cancels: <=0.5 ULP against <=1.5 ULP is a bound of 2 ULP on their difference. Empirical distribution, reported as evidence: worst observed 1 ULP over 50,000 swept cases at the worst-case unit pairing, zero exceedances. Recorded in docs/open-item-06-derived-tolerances.md.',
   },
   {
     id: 'ratio-test-tolerance',
     label: 'Ratio-test tolerance',
-    value: 'Measured at 4 ULP, compared with less than or equal. AWAITING SIGN-OFF',
+    value: 'Analytic bound: 6 ULP, compared with less than or equal',
     basis: 'derived',
     status:
-      'URS open item 6. MEASURED, NOT YET ACCEPTED, on the same terms as the row above. Derived over the stated generation method and no other, and it does not inherit the round-trip figure: 3,300,000 consecutive ratios at twelve points, factors from 1.01 to 20, top points across ten decades, with 9 cases at 4 ULP and none above. A Math.pow-generated series differs from the stated method by up to 4 ULP at a factor of 1.7, which is the whole of this bound, and by nothing at all at a factor of 3, which is why the non-integer case is in the fixture set. Sensitivity is bounded on both sides: an inserted rounding is detected at 15 significant figures and NOT detected at 16. Recorded in docs/open-item-06-derived-tolerances.md.',
+      'OPEN, URS open item 6, on the same terms as the row above. Derived over the stated generation method and no other, and it does not inherit the round-trip figure. THE BUILD’S EARLIER 4 ULP FIGURE WAS A SAMPLE MAXIMUM OVER 3.3 MILLION CASES AND IS WITHDRAWN AS A TOLERANCE, per C4-CN-01 as amended: an empirical maximum is evidence, never the bound itself. The analytic bound counts every rounding operation in the worst consecutive pair of a 12-point series (exponents 10 and 11): 9 rounding multiplies from exponentiation by squaring, plus 3 divisions (one to form each of the two points, one to form their ratio) = 12 operations x 0.5 ULP = 6 ULP. The 3.3 million-case empirical distribution is kept as evidence the bound is not loose: worst observed 4 ULP, with only 9 cases reaching it and none above. Recorded in docs/open-item-06-derived-tolerances.md.',
   },
   {
-    id: 'viewport-supported',
-    label: 'Viewport at which C4-NF-03 is met',
-    value: 'NOT MET at any point count at 1366x768 or 1280x800. Met from about 1320px of viewport height at 12 points',
-    basis: 'inspection',
+    id: 'ratio-test-sensitivity',
+    label: 'Ratio-test sensitivity',
+    value: 'Detected at 15 significant figures, NOT detected at 16',
+    basis: 'derived',
     status:
-      'ACCEPTED DEVIATION, declared rather than met. C4-NF-03 requires the inputs and the full series to fit one screen without scrolling. Measured 14 September 2026 at both viewports named in the build brief, since the reference viewport is undeclared. THE POINT CAP IS NOT THE BINDING CONSTRAINT and reducing it cannot close the gap: at TWO points with no flags the content still reaches 816px against 768 available, and 802px against 800. The remedy URS open item 7 prescribes therefore does not work, and reducing the cap would cost a user ten points of series for nothing. What did work is collapsing each declaration to a summary of its declared values once the series exists, which took the input column from 2017px to 672px and moved the binding constraint from the inputs to the result. The residual is the masthead and the panel chrome, which are fixed costs. Full measurement in docs/open-item-07-layout-check.md.',
+      'MEASURED, per C4-IV-05, PENDING THE ITEM 6 RECORD; signed with it rather than separately. Stated on the page as the test’s own blind spot, per C4-IV-05: a defect smaller than approximately one rounding per step is invisible to it. An inserted rounding to 16 significant figures moves the series by about 3 ULP, inside the 6 ULP bound; at 15 it reaches about 35 ULP, an order of magnitude clear of it. Recorded in docs/open-item-06-derived-tolerances.md.',
+  },
+  {
+    id: 'nf-03-conformance',
+    label: 'C4-NF-03 conformance',
+    value: 'MET at the reference viewport, under window scroll, at every acceptance-25 position where a row is in view',
+    basis: 'derived',
+    status:
+      'MEASURED. A prior MEASURED claim on this row was wrong and is withdrawn: it scrolled `.series-scroll`, the series table’s own internal region, and never tested the page itself, so it could not have caught the failure it claimed to rule out. Scrolling the window past roughly 600px showed every row and the C4-FL-03 flag with no declaration visible anywhere, because the declaration summaries lived in the left column and the series and flags lived in the right column, two independently-scrolling regions. The remedy is `.series-sticky` in App.tsx: the declaration line and the flag list sit above the table in one block, `position: sticky` scoped to the table they describe, so they stay in the viewport for as long as any row of it does, under ordinary window scroll and nothing else. Measured by scripts/check-network.mjs, in a real browser, driving actual window scroll, at all fourteen of acceptance 25’s positions (the page at its own top, at its own bottom, and each of twelve rows aligned to the viewport’s bottom edge), on every run. SCOPE: this holds for acceptance 25’s reference declaration set. The sticky block can only be as short as the declaration line and the flag text it carries; a series whose flags alone name enough points to exceed 650 px of text would not measure MET at this viewport, a case acceptance 25’s reference series does not reach. Full measurement recorded in docs/open-item-07-layout-check.md.',
   },
   {
     id: 'reference-viewport',
     label: 'Reference viewport',
-    value: 'Not declared',
+    value: '1366 × 650 CSS px',
     basis: 'inspection',
     status:
-      'OPEN, URS open item 11, owned outside this build. The one-screen requirement is measured against it, so until it is declared the layout measurement of open item 7 is recorded at two common laptop viewports instead, and the point cap is set from the worse of them.',
+      'DISCLOSED, URS open item 11, CLOSED at v0.5. Page area delivered by a 1366 × 768 laptop display after browser chrome. Declared as a viewport, not a resolution. Basis configuration: PENDING. The developer’s own measurement environment does not expose real OS window chrome reliably (an automated browser reports no outer window dimensions and an atypical device pixel ratio), so the browser, version, operating system and bookmarks-bar state behind the 650 px figure have not been independently re-measured here and are recorded as pending confirmation on a representative machine, so that the number remains reproducible rather than asserted.',
   },
 ] as const
 

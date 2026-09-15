@@ -221,12 +221,41 @@ describe('acceptance 7, the round trip is confirmed capable of failing', () => {
 })
 
 /**
- * C4-IV-04 and C4-FX-02: the same quantity entered in two units agrees.
+ * C4-IV-04: the same quantity entered in two units agrees, over the path
+ * INCLUDING unit normalisation. This has its own register row and its own
+ * derived bound, separate from the round-trip tolerance above: that tolerance
+ * is derived over the round trip ALONE, taking `volumePerConcentration` as
+ * given; this one is derived over the conversion that PRODUCES it, which the
+ * round trip does not exercise. Conflating the two would mean the register row
+ * stated a bound nothing here actually measured.
  *
- * This is the test a design that normalised twice would fail, which is why it
- * is here rather than left to inspection.
+ * THE DERIVATION. `VOLUME_TO_UL.uL` and `CONCENTRATION_TO_UG_PER_ML['ug/mL']`
+ * are both exactly 1: multiplying by 1 is exact in IEEE 754, so a quantity
+ * entered in the BASE unit carries no conversion rounding at all. A quantity
+ * entered in any other unit (mL, mg/mL) carries exactly one conversion
+ * multiply, at most half an ULP.
+ *
+ * Worst case: staining volume entered in mL AND stock concentration entered in
+ * mg/mL, compared against both entered in their base units.
+ *
+ *   base-unit path:      0 conversion multiplies, then 1 division to form
+ *                         volumePerConcentration               = 1 operation
+ *   non-base-unit path:  2 conversion multiplies (one per quantity), then
+ *                         1 division                            = 3 operations
+ *
+ * Each path's relative error from the true value is bounded by its own
+ * operation count x half an ULP: <=0.5 ULP for the base-unit path, <=1.5 ULP
+ * for the non-base-unit path. The two paths are compared against EACH OTHER,
+ * not against a round trip on a shared constant, so their errors do not
+ * cancel: the bound on their difference is the SUM, 0.5 + 1.5 = 2 ULP.
+ *
+ * This is deliberately not inherited from the round-trip figure: it is a
+ * different operation count over a different path, per C4-IV-04's own register
+ * row.
  */
-describe('acceptance, the unit paths agree', () => {
+export const UNIT_NORMALISATION_TOLERANCE_ULP = 2
+
+describe('C4-IV-04, the unit paths agree over the path including normalisation', () => {
   const inMicrolitres: SeriesInputs = { ...BASE, stainingVolume: { value: 100, unit: 'uL' } }
   const inMillilitres: SeriesInputs = { ...BASE, stainingVolume: { value: 0.1, unit: 'mL' } }
   const inMgPerMl: SeriesInputs = BASE
@@ -235,22 +264,53 @@ describe('acceptance, the unit paths agree', () => {
     stock: { kind: 'stated', concentration: { value: 200, unit: 'ug/mL' }, massBasis: 'antibody-protein' },
   }
 
-  it('agrees between microlitres and millilitres', () => {
+  it('agrees between microlitres and millilitres, on the reference case', () => {
     const a = normalise(inMicrolitres)
     const b = normalise(inMillilitres)
     expect(ulpsBetween(a.stainingVolumeUl, b.stainingVolumeUl)).toBeLessThanOrEqual(
-      ROUND_TRIP_TOLERANCE_ULP,
+      UNIT_NORMALISATION_TOLERANCE_ULP,
     )
     expect(
       ulpsBetween(a.volumePerConcentration as number, b.volumePerConcentration as number),
-    ).toBeLessThanOrEqual(ROUND_TRIP_TOLERANCE_ULP)
+    ).toBeLessThanOrEqual(UNIT_NORMALISATION_TOLERANCE_ULP)
   })
 
-  it('agrees between mg/mL and µg/mL', () => {
+  it('agrees between mg/mL and µg/mL, on the reference case', () => {
     const a = normalise(inMgPerMl)
     const b = normalise(inUgPerMl)
     expect(ulpsBetween(a.stockUgPerMl as number, b.stockUgPerMl as number)).toBeLessThanOrEqual(
-      ROUND_TRIP_TOLERANCE_ULP,
+      UNIT_NORMALISATION_TOLERANCE_ULP,
     )
+  })
+
+  it('holds over a swept range, on the worst-case pairing of units', () => {
+    // The worst case per the derivation above: volume in mL against volume in
+    // µL, concentration in mg/mL against concentration in µg/mL, together, so
+    // that both conversion multiplies are on the same side of the comparison
+    // and the errors do not have a chance to cancel by coincidence.
+    let worst = 0
+    let exceeded = 0
+    for (const trial of sweep(50_000)) {
+      const base: SeriesInputs = {
+        ...BASE,
+        stainingVolume: { value: trial.stainingVolumeUl, unit: 'uL' },
+        stock: { kind: 'stated', concentration: { value: trial.stockUgPerMl, unit: 'ug/mL' }, massBasis: 'antibody-protein' },
+      }
+      const converted: SeriesInputs = {
+        ...BASE,
+        stainingVolume: { value: trial.stainingVolumeUl / 1000, unit: 'mL' },
+        stock: { kind: 'stated', concentration: { value: trial.stockUgPerMl / 1000, unit: 'mg/mL' }, massBasis: 'antibody-protein' },
+      }
+      const a = normalise(base)
+      const b = normalise(converted)
+      const av = a.volumePerConcentration as number
+      const bv = b.volumePerConcentration as number
+      if (!Number.isFinite(av) || !Number.isFinite(bv) || av === 0 || bv === 0) continue
+      const distance = ulpsBetween(av, bv)
+      if (distance > worst) worst = distance
+      if (distance > UNIT_NORMALISATION_TOLERANCE_ULP) exceeded += 1
+    }
+    expect(worst).toBeLessThanOrEqual(UNIT_NORMALISATION_TOLERANCE_ULP)
+    expect(exceeded).toBe(0)
   })
 })

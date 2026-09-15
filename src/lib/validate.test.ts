@@ -54,6 +54,40 @@ describe('C4-HI-01, a stock concentration that is zero or negative', () => {
   })
 })
 
+describe('C4-HI-01, a top point that does not resolve to a stock volume (volume-anchored)', () => {
+  it('rejects a top point entered as a concentration once the stock is declared not stated', () => {
+    // Reproduced against the build: a top point entered as a concentration
+    // (form 3) needs a stock concentration to resolve to a stock volume, and
+    // 'not-stated-by-vendor' has none. Previously mislabelled C4-HI-06, which
+    // is reserved for the computed-system check below and fires only once a
+    // series exists to evaluate it against. This is the same failure to
+    // resolve as the concentration-anchored case above, just anchored on
+    // volume instead, so it shares that case's code rather than inventing one.
+    const [rejection] = rejectionsFor({
+      stock: { kind: 'not-stated-by-vendor' },
+      topPoint: { form: 3, value: { value: 5, unit: 'ug/mL' } },
+    })
+    expect(rejection.code).toBe('C4-HI-01')
+    expect(rejection.field).toBe('top-point')
+    expect(rejection.message).toMatch(/does not resolve to a stock volume/i)
+  })
+
+  it('accepts the same stock declaration with the top point entered as a volume or a dilution factor', () => {
+    expect(
+      rejectionsFor({
+        stock: { kind: 'not-stated-by-vendor' },
+        topPoint: { form: 1, value: { value: 5, unit: 'uL' } },
+      }),
+    ).toEqual([])
+    expect(
+      rejectionsFor({
+        stock: { kind: 'not-stated-by-vendor' },
+        topPoint: { form: 4, value: 10 },
+      }),
+    ).toEqual([])
+  })
+})
+
 describe('C4-HI-02, a staining volume that is zero or negative', () => {
   it.each([0, -10] as const)('rejects %s µL', (value) => {
     const [rejection] = rejectionsFor({ stainingVolume: { value, unit: 'uL' } })

@@ -46,6 +46,7 @@ import {
   type VendorBasis,
   type VolumeUnit,
 } from './units'
+import type { RetainableField } from './retention'
 
 /** A number the user typed, with the unit they selected for it. */
 export interface Entered<U extends string> {
@@ -148,6 +149,16 @@ export interface SeriesInputs {
   dilutionFactor: number
   points: number
   imported: ImportedMolecularWeight | null
+  /**
+   * C4-ST-03 and C4-NF-07, Nadira's review, item 2. Which declarations, if
+   * any, still hold a value restored from a previous session and not yet
+   * confirmed or edited in this one. The arithmetic never reads this field;
+   * it is carried only so the structured object can say, alongside the
+   * existing `pipettingMinimum.provenance`, that a series was read under a
+   * declaration the reader did not make this session, the exact condition
+   * C4-NF-03's layout remedy exists to keep from going unnoticed.
+   */
+  retainedFields?: readonly RetainableField[]
 }
 
 /**
@@ -287,8 +298,10 @@ export function anchorVolumeUl(inputs: SeriesInputs, base: Normalised): number |
 }
 
 /** The forms a top point may be entered in, given what the stock declares. */
-export function acceptedTopPointForms(stock: StockDeclaration): readonly TopPointForm[] {
-  return stock.kind === 'stated' ? [1, 2, 3, 4, 5] : [1, 4]
+export function acceptedTopPointForms(
+  stockKind: StockDeclaration['kind'],
+): readonly TopPointForm[] {
+  return stockKind === 'stated' ? [1, 2, 3, 4, 5] : [1, 4]
 }
 
 export type { VendorBasis }

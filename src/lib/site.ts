@@ -37,7 +37,7 @@ export const TOOL_ID = 'C4'
 export const TOOL_NAME = 'Antibody Titration Planner'
 
 /** The specification this build is written against. Stated on the page. */
-export const URS_VERSION = '0.4'
+export const URS_VERSION = '0.5'
 
 /**
  * The engine version stamped on every output, per C4-NF-06.

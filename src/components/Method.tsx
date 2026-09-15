@@ -20,6 +20,7 @@ import {
   DETERMINES_NOT_VERIFIES_STATEMENT,
   DILUTION_CONVENTION_STATEMENT,
   PRECISION_PRINCIPLE,
+  RATIO_TEST_BLIND_SPOT_STATEMENT,
   STAINING_VOLUME_STATEMENT,
   THRESHOLD_EVALUATION_STATEMENT,
   UNDETECTABLE_FAILURES,
@@ -44,9 +45,16 @@ interface Props {
   result: SeriesResult | null
   storageKeys: readonly string[]
   onClearStorage: () => void
+  /**
+   * Whether an import was decoded, successfully or not, this session. There is
+   * no on-page control that offers an import: an object arrives only if the
+   * page was opened with one already in the URL fragment. Gated so the
+   * integrity-check statement is not shown on a page that has nothing to check.
+   */
+  importAttempted: boolean
 }
 
-export function Method({ result, storageKeys, onClearStorage }: Props) {
+export function Method({ result, storageKeys, onClearStorage, importAttempted }: Props) {
   return (
     <section className="panel method-panel">
       <div className="panel-head">
@@ -88,8 +96,9 @@ export function Method({ result, storageKeys, onClearStorage }: Props) {
           <li>{DILUTION_CONVENTION_STATEMENT}</li>
           <li>{PRECISION_STATEMENT}</li>
           <li>{THRESHOLD_EVALUATION_STATEMENT}</li>
+          <li>{RATIO_TEST_BLIND_SPOT_STATEMENT}</li>
           <li>{RETENTION_STATEMENT}</li>
-          <li>{INTEGRITY_SCOPE_STATEMENT}</li>
+          {importAttempted && <li>{INTEGRITY_SCOPE_STATEMENT}</li>}
         </ul>
 
         {result !== null && (

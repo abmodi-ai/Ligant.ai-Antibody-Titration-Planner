@@ -194,6 +194,17 @@ describe('C4-OUT-01 and C4-OUT-02, what the object has to carry', () => {
     ).toBe('default')
   })
 
+  it('records which declarations, if any, were retained from a previous session', () => {
+    // C4-ST-03 and C4-NF-07, Nadira's review, item 2: a series read under a
+    // retained declaration must say so in the structured object too, not
+    // only on screen, and empty is the honest default for a fresh session.
+    expect(toStructuredResult(run(BASE)).declarations.retained).toEqual([])
+    const withRetained = toStructuredResult(
+      run({ ...BASE, retainedFields: ['stainingVolume', 'pipettingMinimum'] }),
+    )
+    expect(withRetained.declarations.retained).toEqual(['stainingVolume', 'pipettingMinimum'])
+  })
+
   it('records the cell density, with no threshold attached to it', () => {
     // C4-SC-04: recorded as a declaration of the condition the series was
     // designed under, and deliberately not compared against anything.

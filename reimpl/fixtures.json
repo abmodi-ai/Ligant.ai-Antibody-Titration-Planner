@@ -84,7 +84,7 @@
     },
     {
       "id": "twelve-points-non-integer-factor",
-      "assumption": "Twelve points at a factor of 1.7, whose integer powers are not exactly representable. This is the case where the generation method matters most: a pow-generated series differs from this one by up to 4 ULP.",
+      "assumption": "Twelve points at a factor of 1.7, whose integer powers are not exactly representable. This is the case where the generation method matters most: a pow-generated series differs from this one, by an engine-dependent amount of the same order as the 6 ULP ratio-test bound.",
       "inputs": {
         "stock": { "kind": "stated", "concentration": { "value": 1, "unit": "mg/mL" }, "massBasis": "conjugate" },
         "stockSource": "measured",

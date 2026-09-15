@@ -71,9 +71,11 @@ every reported quantity is in the structured result.
 Each point is computed from the top point and its integer index as
 `top / f^(i-1)`, with the power formed by exponentiation by squaring and applied
 as a single division. `Math.pow` is not used, and neither is repeated
-multiplication from the preceding point. Both choices are measured rather than
-asserted: a pow-generated series differs from this one by up to 4 ULP at a
-factor of 1.7, which is the whole of the derived ratio tolerance.
+multiplication from the preceding point. The ratio-test tolerance, 6 ULP, is an
+analytic bound over every rounding operation in the worst consecutive pair of a
+12-point series, not an empirical sample maximum: `Math.pow`'s disagreement
+with this method is engine-dependent, real and non-zero at a factor of 1.7, and
+of the same order as that bound wherever it has been measured.
 
 Displayed values are rounded to three significant figures, **half away from
 zero, applied to the exact stored binary value**. A two-fold series from a round
@@ -163,24 +165,18 @@ cannot go live on the strength of a local run.
 
 ## Status and limitations
 
-Built against **C4 URS v0.4**. The specification's open items that belong to
+Built against **C4 URS v0.5**. The specification's open items that belong to
 this repository are written up in `docs/`:
 
 | Item | State |
 |---|---|
-| 6, the derived tolerances | Measured. Awaiting sign-off |
-| 7, the one-screen requirement | Measured. **Not met**, and the remedy the specification prescribes cannot meet it |
-| 8, the shared result object | **Escalated.** It cannot express a series |
+| 6, the derived tolerances | Three analytic bounds derived and enforced. **Open**, pending sign-off on the derivation record |
+| 7, the one-screen requirement | **Superseded at v0.5.** Restated as a property (a series point is never read apart from its context) and MET at the reference viewport |
+| 8, the shared result object | **Escalated.** It cannot express a series; C1 does not migrate, the two schemas coexist |
 | 9, the transport and its integrity check | Designed and built |
-| 16, the shipped calculator's conformance | Measured. It conforms |
+| 16, the shipped calculator's conformance | Tie-breaking direction measured, conforms. Displayed precision does not match C4's for most of its range |
 
-Two limitations are worth knowing before you use this:
-
-**The one-screen requirement is not met.** Measured at 1366 × 768 and
-1280 × 800, the page does not fit, and it does not fit at any point count: at
-two points with no flags it still exceeds the viewport. The shortfall is
-declared in the constants register on the page with its measurements rather than
-left for a reader to discover.
+One limitation is worth knowing before you use this:
 
 **A series with points below your pipetting minimum needs an intermediate
 working stock**, and the tool that plans those does not exist yet. Most real

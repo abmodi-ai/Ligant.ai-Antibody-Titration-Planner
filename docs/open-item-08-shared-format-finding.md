@@ -120,6 +120,39 @@ This is conformance to the contract rather than a local extension of it: nothing
 in C1's object is altered, nothing of C1's is redefined, and no ADC shape has
 been invented to stand in for one.
 
+## Migration or coexistence
+
+**The two coexist. C1 does not migrate to `ligant-benchtools-c4-series`, and
+this is not deferred as a future question: the finding above already answers
+it.**
+
+C4-ST-06 requires ONE MECHANISM for C1 to C4 and C4 to C3, and that requirement
+is met at the TRANSPORT layer, not the payload-schema layer. `transport.ts`'s
+envelope, `{ v, kind, payload, checksum }`, wraps either payload identically;
+`kind` discriminates `c1-conversion` from `c4-series`, and nothing about the
+encoding, the checksum, or the rejection messages changes with it. That is the
+one mechanism the requirement asks for, and it is already built and shared.
+
+Migrating C1's PAYLOAD to `ligant-benchtools-c4-series`'s shape would mean
+giving a single-value tool a schema built around an ordered dimension and
+point-scoped flags it has no values to put there. Finding 2 above is the
+reason this is not a close call: C1's object is the right shape for one value,
+and C4's two additions (`points[].flags`, `flags[].points`) exist to carry a
+SERIES, which a conversion is not. Migrating C1 onto them would not simplify
+anything; it would add an unused dimension to every C1 result for the benefit
+of a consumer C1 does not have.
+
+So the schemas stay separate, per tool, sharing the `Quantity` and
+`StructuredFlag` primitives verbatim as the table above states, and the
+transport envelope is what makes that safe to do: C3 (or anything else reading
+a `c4-series` object) never has to guess which payload shape arrived, because
+`kind` says so before a single field of `payload` is read.
+
+This does not close the three questions below, which are about whether a
+THIRD, reconciled format should someday exist. It closes the narrower question
+open item 8 was blocking build on: nothing about shipping C4's own schema now
+leaves C1 to be migrated later as unfinished business.
+
 ## What NADIRA is asked to decide
 
 1. Whether a bench-tools format should exist at all, given that two of three

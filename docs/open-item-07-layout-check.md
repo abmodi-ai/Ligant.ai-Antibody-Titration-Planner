@@ -3,10 +3,63 @@
 | Field | Value |
 |---|---|
 | URS | C4 v0.4, C4-NF-03, C4-SR-04, acceptance 25, open item 7 |
-| Status | **Measured. The requirement is not met, and the prescribed remedy cannot meet it** |
+| Status | **SUPERSEDED at v0.5 (A1). Kept as the historical record of the finding that led to the restatement** |
 | Owner | Developer |
 | Date | 14 September 2026 |
 | Depends on | Open item 11, the reference viewport, still undeclared |
+
+**Superseded, not retracted.** v0.5's A1 restated C4-NF-03 as the property it
+protected, a series point is never read apart from the declarations and flags
+it was designed under, rather than the one-screen proxy this document measures
+below. The finding that the proxy is unmeetable at any laptop viewport, and
+that reducing the point cap does not help, is what drove that restatement, and
+is kept here for that reason. It is no longer the requirement the tool is
+built against.
+
+**Revised 15 September 2026.** The paragraph this replaced described the
+region-scroll measurement built at v0.5's first pass: a bounded, internally
+scrollable region around the series table (`.series-scroll`), with the
+declaration summaries and the flag list held fixed outside it. That
+measurement was wrong, not in its arithmetic but in its premise. Nadira's
+review scrolled the actual window, not that region, and found that from
+roughly 600px of window scroll, every row and the C4-FL-03 flag were visible
+with no declaration in view anywhere: the declaration summaries live in the
+left column (`.stack`) and the series and flags live in the right column
+(`.rail`), two independently-scrolling regions, and bounding the table's own
+internal scroll did nothing to keep those two columns together under window
+scroll, because window scroll was never what it was measuring.
+
+The CURRENT measurement, against the restated requirement and the closed
+reference viewport (1366 x 650 CSS px), is the `nf-03-conformance` register
+row and the acceptance-25 section of `scripts/check-network.mjs`, rewritten to
+drive **window scroll only**, with no internal scroll region left anywhere on
+the page. The mechanism is `.series-sticky` in `App.tsx`: a compact
+declaration line (staining volume, cell number, vendor basis, stock mass
+basis, pipetting minimum, each individually marked if retained from a
+previous session) sits directly above the series table, inside the same
+block as the flag list, and that whole block is `position: sticky`, scoped to
+the table it describes rather than to the page. It stays in the viewport for
+as long as any row of that table does, under ordinary window scroll, because
+the table is what it sticks against, not the page. The series panel's
+enclosing `.panel` trades its corner-clipping `overflow: hidden` for
+`overflow: visible` to allow this (`.panel-series` in `styles.css`), which is
+what lets the sticky block track the true viewport rather than being capped
+by the panel's own auto-fitted height. Acceptance 25's fourteen positions
+(page at its own top, at its own bottom, and each of the twelve rows aligned
+to the viewport's bottom edge) are checked at whichever of those actually
+show a row in view; the reference declaration set (0.2 mg/mL,
+certificate-of-analysis, 100 µL, 1 × 10⁶ cells, top point 1 µg/test, 2-fold,
+12 points, one flag) MEASURES MET at all twelve such positions. This does not
+generalise to every possible series: the sticky block can only be as short as
+the declaration line and the flag text it carries, and a series whose flags
+alone exceed roughly 650px of text at this viewport (several vendor-recommendation
+and pipetting-minimum flags together, observed at four flags in testing) would
+not measure MET here. That limit is a property of how much text a given
+series' flags require, not a defect in this mechanism, and is disclosed on
+the register row rather than left for a reader to find by constructing a
+worse case than acceptance 25's reference one.
+
+---
 
 C4-NF-03 requires the inputs and the full series to fit one screen without
 scrolling, at twelve points, with the full input set. Open item 7 asks for this
