@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { LigantLockup } from '../LigantMark'
-import { TOOLS, TOOL_PATH, absoluteUrl } from '../../lib/site'
+import { TOOLS, TOOL_PATH, LIGANT_URL, absoluteUrl } from '../../lib/site'
 
 /**
  * The page's identity, and the way out of it.
@@ -25,6 +25,13 @@ import { TOOLS, TOOL_PATH, absoluteUrl } from '../../lib/site'
  * independently of any other, including without C1 and C3. These links are a
  * convenience for a reader, not a dependency: nothing on this page loads from
  * them, and the tool works with every one of them broken.
+ *
+ * TWO MORE LINKS, one level up each: the Ligant lockup goes to `ligant.ai`,
+ * the parent site, and "Bench Tools" goes to the suite's own root
+ * (`absoluteUrl('/')`, not a bare `/`, for the same reason the sibling links
+ * are absolute). Neither is a tool switch, so neither belongs in `.tool-nav`
+ * or gets an `aria-current` treatment; they are a way out to the level above
+ * this page, not a way sideways to a peer of it.
  */
 interface Props {
   title: string
@@ -35,7 +42,9 @@ export function Masthead({ title, children }: Props) {
   return (
     <header className="masthead">
       <div>
-        <LigantLockup />
+        <a href={LIGANT_URL} className="lockup-link">
+          <LigantLockup />
+        </a>
         <h1>{title}</h1>
         <p>{children}</p>
       </div>
@@ -51,7 +60,9 @@ export function Masthead({ title, children }: Props) {
             </li>
           ))}
         </ul>
-        <span className="eyebrow suite-mark">Bench Tools</span>
+        <a href={absoluteUrl('/')} className="eyebrow suite-mark">
+          Bench Tools
+        </a>
       </div>
     </header>
   )

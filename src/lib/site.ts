@@ -18,6 +18,10 @@
 
 export const SITE_URL = 'https://benchtools.ligant.ai'
 
+/** The parent site, one level up from the suite. Not `SITE_URL`: that is the
+ *  Bench Tools suite's own address, this is Ligant's. */
+export const LIGANT_URL = 'https://ligant.ai/'
+
 /**
  * The slug, decided 14 September 2026, closing URS open item 12.
  *
