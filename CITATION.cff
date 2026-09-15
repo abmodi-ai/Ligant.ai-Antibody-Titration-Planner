@@ -6,10 +6,11 @@
 # against the constants in src/lib/site.ts, and the remaining diff against the
 # manuscript is done by hand because nothing here can see that document.
 #
-# The DOI is deliberately absent. Zenodo mints it when the tagged release is
-# archived, and a placeholder that looks like an identifier is worse than an
-# absent one. Add it under `identifiers` once minted, and set CITATION_DOI in
-# src/lib/site.ts at the same time.
+# The DOI was deliberately absent until the v0.1.0 tag was archived by
+# Zenodo, 15 September 2026: a placeholder that looks like an identifier is
+# worse than an absent one. It is the version-specific DOI, not the concept
+# DOI (10.5281/zenodo.22773731), which always resolves to whichever version
+# is newest and so is not the specific artefact this citation names.
 cff-version: 1.2.0
 message: If you use this software, please cite it as below.
 type: software
@@ -35,10 +36,14 @@ version: v0.1.0
 # To be set to the day the tag is cut, not the day this file was written. A
 # citation whose release date precedes the released commit is wrong in the
 # direction that matters: it points a reader at a tree that did not yet exist.
-date-released: '2026-09-14'
+date-released: '2026-09-15'
 license: Apache-2.0
 repository-code: https://github.com/abmodi-ai/Ligant.ai-Antibody-Titration-Planner
 url: https://benchtools.ligant.ai/antibody-titration-planner/
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.22773732"
+    description: The version of record archived by Zenodo for this release.
 keywords:
   - flow cytometry
   - antibody titration

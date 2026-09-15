@@ -60,13 +60,17 @@ export const REPO_URL: string | null =
   'https://github.com/abmodi-ai/Ligant.ai-Antibody-Titration-Planner'
 
 /**
- * The Zenodo concept DOI, once the tagged release is archived.
+ * The Zenodo DOI for THIS version, minted when the v0.1.0 tag was archived,
+ * 15 September 2026.
  *
- * Null until minted. A placeholder that looks like an identifier is worse than
- * an absent one, and `scripts/check-citation.mjs` fails the build on a zeroed
- * Zenodo DOI for exactly that reason.
+ * The version-specific DOI, not the concept DOI (10.5281/zenodo.22773731,
+ * which always resolves to whichever version is newest): the citation this
+ * feeds names a specific version, "(v0.1.0)", so it has to point at the
+ * artefact that string actually describes, not at whatever supersedes it
+ * later. Matches the `identifiers` entry in CITATION.cff, by hand: nothing
+ * here cross-checks the two against each other.
  */
-export const CITATION_DOI: string | null = null
+export const CITATION_DOI: string | null = '10.5281/zenodo.22773732'
 
 /**
  * Whether acceptance test 17 has been run against the DEPLOYED address.

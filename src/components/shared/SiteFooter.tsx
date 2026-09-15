@@ -17,6 +17,7 @@
  * established. An accurate weaker claim is worth more than an unverified
  * stronger one.
  */
+import { useState } from 'react'
 import {
   APP_VERSION,
   CITATION_DOI,
@@ -26,6 +27,50 @@ import {
   REPO_URL,
   TOOL_NAME,
 } from '../../lib/site'
+
+/**
+ * The citation, in three pieces, so what is shown and what is copied cannot
+ * differ.
+ */
+const CITATION_LEAD = `Modi, A.B. (${RELEASE_YEAR}). `
+const CITATION_TAIL =
+  ` (${APP_VERSION}) [Computer software]. Ligant AI Incorporated. ${DEPLOYED_URL.replace('https://', '')}` +
+  (CITATION_DOI !== null ? ` doi:${CITATION_DOI}` : '')
+
+/**
+ * One reference, with a control that takes it in a single action.
+ *
+ * `copied` is set only once the write resolves, not on click: a claim this
+ * page makes about itself should be as accurate as every other one on it.
+ */
+function CitationRow() {
+  const [copied, setCopied] = useState(false)
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(CITATION_LEAD + TOOL_NAME + CITATION_TAIL)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // A browser may refuse clipboard access. The reference is on the page
+      // and selectable regardless, so silence is better than an error the
+      // reader cannot act on.
+    }
+  }
+
+  return (
+    <div className="footer-citation-row">
+      <p>
+        {CITATION_LEAD}
+        <cite>{TOOL_NAME}</cite>
+        {CITATION_TAIL}
+      </p>
+      <button type="button" onClick={copy} aria-label="Copy the software citation" aria-live="polite">
+        {copied ? 'Copied' : 'Copy'}
+      </button>
+    </div>
+  )
+}
 
 export function SiteFooter() {
   return (
@@ -79,17 +124,8 @@ export function SiteFooter() {
 
       <div className="footer-citation">
         <span className="eyebrow">How to cite</span>
-        {/*
-          One line, in the order a reference manager expects, so it can be
-          copied without being rearranged. No DOI yet: one is minted with the
-          archived release, and a placeholder that looks like an identifier is
-          worse than an absent one.
-        */}
-        <p>
-          Modi, A.B. ({RELEASE_YEAR}). <cite>{TOOL_NAME}</cite> ({APP_VERSION}) [Computer software].
-          Ligant AI Incorporated. {DEPLOYED_URL.replace('https://', '')}
-          {CITATION_DOI !== null && <> doi:{CITATION_DOI}</>}
-        </p>
+        <p className="footer-citation-note">Cite the software as below.</p>
+        <CitationRow />
       </div>
 
       <p className="footer-licence">
