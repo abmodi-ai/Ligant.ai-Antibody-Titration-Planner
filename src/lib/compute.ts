@@ -316,13 +316,24 @@ function raiseFlags(
   const flags: Flag[] = []
 
   // C4-FL-01. Only where the vendor stated a volume for there to be a
-  // difference from.
+  // difference from, which is only `per-test-volume-stated`: the other two
+  // bases that reach `vendorContext` either have no test volume at all or
+  // (final-concentration) do not depend on one.
   if (
     vendor !== null &&
     vendor.vendorTestVolumeUl !== null &&
-    vendor.vendorTestVolumeUl !== base.stainingVolumeUl
+    vendor.vendorTestVolumeUl !== base.stainingVolumeUl &&
+    inputs.vendor.basis === 'per-test-volume-stated'
   ) {
-    flags.push(flagVolumeMismatch(base.stainingVolumeUl, vendor.vendorTestVolumeUl))
+    flags.push(
+      flagVolumeMismatch(
+        inputs.vendor.amountPerTest,
+        vendor.vendorTestVolumeUl,
+        base.stainingVolumeUl,
+        vendor.recommendedUgPerMl,
+        vendor.atStainingVolumeUgPerMl,
+      ),
+    )
   }
 
   // C4-FL-02.

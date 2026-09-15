@@ -34,6 +34,7 @@ import {
   type ImportedMassBasis,
   type StockMassBasis,
 } from './units'
+import type { VendorAmount } from './normalise'
 
 export type FlagCode =
   | 'C4-FL-01'
@@ -189,18 +190,52 @@ export function reportablePair(
 /* Flag constructors                                                         */
 /* ------------------------------------------------------------------------ */
 
-export function flagVolumeMismatch(stainingVolumeUl: number, vendorTestVolumeUl: number): Flag {
-  const factor = stainingVolumeUl / vendorTestVolumeUl
+/**
+ * C4-FL-01. THE DIRECTION MATTERS: concentration is amount over volume, so
+ * carrying the SAME amount into a SMALLER staining volume CONCENTRATES it,
+ * and into a LARGER one dilutes it. An earlier version of this flag printed
+ * `stainingVolumeUl / vendorTestVolumeUl`, which is the inverse of the
+ * concentration change and told a reader the opposite of what pipetting the
+ * vendor's amount into their own tube actually does. Found by Nadira's
+ * review against a concrete case (100 µL vendor, 50 µL staining: printed
+ * 0.500, actually 2.00). Fixed by stating both concentrations and taking
+ * their ratio directly, `atStainingVolumeUgPerMl / recommendedUgPerMl`,
+ * rather than re-deriving a factor from volumes alone.
+ */
+export function flagVolumeMismatch(
+  amountPerTest: VendorAmount,
+  vendorTestVolumeUl: number,
+  stainingVolumeUl: number,
+  recommendedUgPerMl: number | null,
+  atStainingVolumeUgPerMl: number | null,
+): Flag {
+  const amountText =
+    amountPerTest.kind === 'mass'
+      ? `${formatSigFigs(amountPerTest.ug)} ${UNIT_LABEL.ug}`
+      : `${amountPerTest.value.value} ${UNIT_LABEL[amountPerTest.value.unit]}`
+
+  // Both concentrations are null together, only when the vendor's amount is a
+  // volume of their own stock and this stock's concentration is not stated
+  // (C4-AB-03): there is then no concentration for either volume to reach.
+  const computable = recommendedUgPerMl !== null && atStainingVolumeUgPerMl !== null
+  const factor = computable ? atStainingVolumeUgPerMl / recommendedUgPerMl : null
+
+  const message = computable
+    ? `The vendor's ${amountText} gives ${formatSigFigs(recommendedUgPerMl)} µg/mL in their ` +
+      `${formatSigFigs(vendorTestVolumeUl)} µL and ${formatSigFigs(atStainingVolumeUgPerMl)} µg/mL in your ` +
+      `${formatSigFigs(stainingVolumeUl)} µL, ${formatSigFigs(factor as number)} times the recommended ` +
+      'concentration if the volume is carried across.'
+    : `The vendor recommendation was defined at a different volume, ${formatSigFigs(vendorTestVolumeUl)} µL against ` +
+      `a staining volume of ${formatSigFigs(stainingVolumeUl)} µL. The per-test volume does not transfer, and the ` +
+      'concentration this would reach cannot be computed here because no stock concentration is stated.'
+
   return {
     code: 'C4-FL-01',
     kind: 'threshold',
     evaluatedOn: 'the declared staining volume against the vendor recommendation',
-    message:
-      `The vendor recommendation was defined at a different volume, ${formatSigFigs(vendorTestVolumeUl)} µL against ` +
-      `a staining volume of ${formatSigFigs(stainingVolumeUl)} µL. The per-test volume does not transfer, and the ` +
-      `concentration at this staining volume differs by a factor of ${formatSigFigs(factor)}.`,
+    message,
     remedy:
-      'Pipetting the recommended volume into this staining volume does not reproduce the concentration the vendor recommended. Use the concentration column rather than the volume column when carrying this recommendation across.',
+      'Pipetting the recommended amount into this staining volume does not reproduce the concentration the vendor recommended. Use the concentration column rather than the volume column when carrying this recommendation across.',
   }
 }
 

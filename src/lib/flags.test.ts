@@ -57,18 +57,79 @@ describe('C4-FL-01, a staining volume differing from the vendor test volume', ()
     },
   })
 
-  it('is raised, and names the factor the concentration differs by', () => {
-    expect(codes(result)).toContain('C4-FL-01')
-    const flag = result.flags.find((f) => f.code === 'C4-FL-01')
-    expect(flag?.message).toMatch(/factor of 0\.500/)
-  })
-
   it('still reports both vendor multiples, distinctly labelled', () => {
     // C4-FX-05 and C4-DT-04. They differ here, which is the whole point of
     // reporting two of them.
     const multiple = result.points[0].vendorMultiple
     expect(multiple?.identical).toBe(false)
     expect(multiple?.atVendorTestVolume).not.toBe(multiple?.atStainingVolume)
+  })
+
+  /*
+   * THE DIRECTION BUG, per Nadira's review: an earlier version printed
+   * `stainingVolumeUl / vendorTestVolumeUl` as "the factor the concentration
+   * differs by", which is the INVERSE of what pipetting the same amount into
+   * a different volume actually does. A staining volume SMALLER than the
+   * vendor's own test volume CONCENTRATES the recommendation; the old code
+   * printed a factor below 1 for exactly this case. C4-FX-05 is extended
+   * here to both directions, each asserting the factor moves the way the
+   * physics does, not the way volumes divide.
+   */
+  describe('the direction of the factor, both ways', () => {
+    it('a staining volume BELOW the vendor test volume CONCENTRATES it, factor above 1', () => {
+      // 50 uL staining against a 100 uL vendor test volume: half the volume,
+      // the same amount, twice the concentration.
+      expect(codes(result)).toContain('C4-FL-01')
+      const flag = result.flags.find((f) => f.code === 'C4-FL-01')
+      expect(flag?.message).toMatch(/10\.0 µg\/mL in their 100 µL/)
+      expect(flag?.message).toMatch(/20\.0 µg\/mL in your 50\.0 µL/)
+      expect(flag?.message).toMatch(/2\.00 times the recommended concentration/)
+      // The bug's own number must not reappear.
+      expect(flag?.message).not.toMatch(/0\.500/)
+    })
+
+    it('a staining volume ABOVE the vendor test volume DILUTES it, factor below 1', () => {
+      const above = run({
+        stainingVolume: { value: 200, unit: 'uL' },
+        vendor: {
+          basis: 'per-test-volume-stated',
+          amountPerTest: { kind: 'volume', value: { value: 5, unit: 'uL' } },
+          testVolume: { value: 100, unit: 'uL' },
+          cellNumber: 'not-stated',
+        },
+      })
+      expect(codes(above)).toContain('C4-FL-01')
+      const flag = above.flags.find((f) => f.code === 'C4-FL-01')
+      expect(flag?.message).toMatch(/10\.0 µg\/mL in their 100 µL/)
+      expect(flag?.message).toMatch(/5\.00 µg\/mL in your 200 µL/)
+      expect(flag?.message).toMatch(/0\.500 times the recommended concentration/)
+      // The bug's own (correct-here, wrong-there) number is not itself proof
+      // of anything: pin the reasoning, not the coincidence that this
+      // direction happens to share a figure with the old defect.
+      expect(flag?.message).not.toMatch(/2\.00 times/)
+    })
+
+    it('falls back to a volume-only message when no stock concentration is stated', () => {
+      // C4-AB-03: the vendor's amount is a volume of a stock this tool was
+      // never told the concentration of, so neither concentration exists to
+      // state. The flag must not fabricate one, and must not silently keep
+      // quiet about the mismatch either.
+      const noStock = run({
+        stock: { kind: 'not-stated-by-vendor' },
+        stainingVolume: { value: 50, unit: 'uL' },
+        topPoint: { form: 1, value: { value: 10, unit: 'uL' } },
+        vendor: {
+          basis: 'per-test-volume-stated',
+          amountPerTest: { kind: 'volume', value: { value: 5, unit: 'uL' } },
+          testVolume: { value: 100, unit: 'uL' },
+          cellNumber: 'not-stated',
+        },
+      })
+      expect(codes(noStock)).toContain('C4-FL-01')
+      const flag = noStock.flags.find((f) => f.code === 'C4-FL-01')
+      expect(flag?.message).toMatch(/cannot be computed here because no stock concentration is stated/)
+      expect(flag?.message).not.toMatch(/µg\/mL/)
+    })
   })
 })
 
