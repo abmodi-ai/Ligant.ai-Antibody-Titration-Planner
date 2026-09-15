@@ -171,7 +171,7 @@ this repository are written up in `docs/`:
 | Item | State |
 |---|---|
 | 6, the derived tolerances | Three analytic bounds derived and enforced. **Open**, pending sign-off on the derivation record |
-| 7, the one-screen requirement | **Superseded at v0.5.** Restated as a property (a series point is never read apart from its context) and MET at the reference viewport |
+| 7, the one-screen requirement | **Superseded at v0.5.** Restated as a property (a series point is never read apart from its context). **Open**, pending re-measurement against a four-flag declaration set at the reference viewport |
 | 8, the shared result object | **Escalated.** It cannot express a series; C1 does not migrate, the two schemas coexist |
 | 9, the transport and its integrity check | Designed and built |
 | 16, the shipped calculator's conformance | Tie-breaking direction measured, conforms. Displayed precision does not match C4's for most of its range |
@@ -186,10 +186,18 @@ it by hand in the meantime.
 
 ## How to cite
 
-The footer of the tool carries the citation, generated from the same constants
-the build uses, so the page, `CITATION.cff` and the tag cannot disagree. No DOI
-yet: one is minted when the tagged release is archived, and a placeholder that
-looks like an identifier is worse than an absent one.
+> Modi, A.B. (2026). Antibody Titration Planner (v0.1.0) [Computer software].
+> Ligant AI Incorporated. benchtools.ligant.ai/antibody-titration-planner/
+> doi:10.5281/zenodo.22773732
+
+The footer of the tool carries this same line, generated from the same
+constants the build uses, with a one-click copy button, so the page,
+`CITATION.cff` and this README cannot disagree.
+
+The DOI above is version-specific, archived by Zenodo for the v0.1.0 tag. The
+concept DOI, [10.5281/zenodo.22773731](https://doi.org/10.5281/zenodo.22773731),
+always resolves to whichever version is newest; cite the version-specific one
+to name the exact artefact these results came from.
 
 ## Licence
 

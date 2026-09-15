@@ -1,9 +1,0 @@
-name = "ligant-antibody-titration-planner-router"
-main = "index.js"
-compatibility_date = "2026-09-14"
-
-# Binds the prefix on the suite's own hostname. The zone must already carry
-# benchtools.ligant.ai, as it does for the two existing routers.
-[[routes]]
-pattern = "benchtools.ligant.ai/antibody-titration-planner*"
-zone_name = "ligant.ai"
