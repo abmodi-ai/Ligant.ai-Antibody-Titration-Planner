@@ -34,30 +34,74 @@ reference viewport (1366 x 650 CSS px), is the `nf-03-conformance` register
 row and the acceptance-25 section of `scripts/check-network.mjs`, rewritten to
 drive **window scroll only**, with no internal scroll region left anywhere on
 the page. The mechanism is `.series-sticky` in `App.tsx`: a compact
-declaration line (staining volume, cell number, vendor basis, stock mass
-basis, pipetting minimum, each individually marked if retained from a
-previous session) sits directly above the series table, inside the same
-block as the flag list, and that whole block is `position: sticky`, scoped to
-the table it describes rather than to the page. It stays in the viewport for
-as long as any row of that table does, under ordinary window scroll, because
-the table is what it sticks against, not the page. The series panel's
-enclosing `.panel` trades its corner-clipping `overflow: hidden` for
-`overflow: visible` to allow this (`.panel-series` in `styles.css`), which is
-what lets the sticky block track the true viewport rather than being capped
-by the panel's own auto-fitted height. Acceptance 25's fourteen positions
-(page at its own top, at its own bottom, and each of the twelve rows aligned
-to the viewport's bottom edge) are checked at whichever of those actually
-show a row in view; the reference declaration set (0.2 mg/mL,
-certificate-of-analysis, 100 µL, 1 × 10⁶ cells, top point 1 µg/test, 2-fold,
-12 points, one flag) MEASURES MET at all twelve such positions. This does not
-generalise to every possible series: the sticky block can only be as short as
-the declaration line and the flag text it carries, and a series whose flags
-alone exceed roughly 650px of text at this viewport (several vendor-recommendation
-and pipetting-minimum flags together, observed at four flags in testing) would
-not measure MET here. That limit is a property of how much text a given
-series' flags require, not a defect in this mechanism, and is disclosed on
-the register row rather than left for a reader to find by constructing a
-worse case than acceptance 25's reference one.
+declaration line (staining volume, cell number, stock concentration, vendor
+basis with its recommended value, stock mass basis, pipetting minimum, each
+individually marked if retained from a previous session) sits directly above
+the series table, inside the same block as the flags, and that whole block
+is `position: sticky`, scoped to the table it describes rather than to the
+page. It stays in the viewport for as long as any row of that table does,
+under ordinary window scroll, because the table is what it sticks against,
+not the page. The series panel's enclosing `.panel` trades its
+corner-clipping `overflow: hidden` for `overflow: visible` to allow this
+(`.panel-series` in `styles.css`), which is what lets the sticky block track
+the true viewport rather than being capped by the panel's own auto-fitted
+height.
+
+**Revised again, 15 September 2026, Nadira's second review.** The paragraph
+this replaces measured MET only against acceptance 25's one-flag reference
+series, and disclosed rather than closed the case of a series with more to
+say: at four flags together (a staining volume, a cell number, a top point
+and a pipetting minimum all differing from the vendor's, which four flags
+together describe, not an unusual one) the block, carrying full flag text,
+measured 669px at a 947px viewport, taller than the 650px reference viewport
+itself, with no declaration in view. Nadira's review rejected the framing:
+"Four flags is a user with a different staining volume, a different cell
+number, a top point below the vendor recommendation and a P2 in hand. That
+is the target user. [...] It is not an edge case."
+
+`.series-sticky` was rebuilt so its height does not grow with flag count, in
+two independent ways rather than one. First, the flags inside it are
+`FlagSummaryList`: each is its reason code plus one compressed line
+(`flag.summary`, shared with "Copy for notebook" so the two cannot drift),
+behind a `<details>` expander for the full text in place; the full text is
+ALSO repeated below the table, in `FlagList`, so a reader who has scrolled
+past the sticky block is not sent back up to read it. Second, that compact
+list is itself capped at a fixed height (190px) with its own internal
+scroll, so even a series whose flags still exceed that, once compressed to
+one line each, absorbs the overflow inside the flag list rather than by
+growing the sticky block past the viewport again.
+
+Acceptance 25's fourteen positions (page at its own top, at its own bottom,
+and each of the twelve rows aligned to the viewport's bottom edge) are
+checked at whichever of those actually show a row in view, now against the
+four-flag declaration set (`enterFourFlagCase` in `scripts/check-network.mjs`,
+kept permanently in `reimpl/fixtures.json` as
+`c4-fx-four-flag-target-user`) rather than the one-flag reference case: 0.2
+mg/mL stock, staining volume 50 µL against a vendor test volume of 100 µL,
+2 × 10⁶ cells against a vendor's stated 1 × 10⁶, top point 8 µg/mL against a
+vendor recommendation of 10.0 µg/mL, pipetting minimum 1 µL entered, 2-fold,
+12 points, raising exactly C4-FL-01, C4-FL-03, C4-FL-07 and C4-FL-08. This
+MEASURES MET at all thirteen of the fourteen positions where a row was in
+view (measured sticky-block height 187px at the reference viewport, well
+inside 650px), checked TWICE at each position: once with every flag summary
+collapsed, the state on load, and once with every one expanded, the state a
+reviewer produces by reading one. The `<details>` expander is the one
+interaction D2 introduced inside the block this row depends on, and Nadira
+reviews by clicking; a claim that covered only the collapsed state would not
+cover how she actually uses it.
+
+This still does not generalise to every conceivable series, on two axes
+rather than one. The flag-summary scroll is a fixed 190px budget, not an
+unlimited one, so a series whose flags, even compressed to one line each,
+still exceed that would scroll within the flag list rather than fail to
+fit, which the measurement above confirms. The declaration line above it
+has NO scroll of its own, and was not stress-tested here: the four-flag
+fixture's vendor basis is `per-test-volume-stated`, and
+`VENDOR_BASIS_LABEL['final-concentration']` alone is roughly a third again
+as long, with `vendorBasisSummary` appending the recommended concentration
+on top of whichever label is in play. A four-flag series on that basis, or
+on any basis whose label and appended values print longer than the one
+measured here, has not been measured and is not covered by this row.
 
 ---
 

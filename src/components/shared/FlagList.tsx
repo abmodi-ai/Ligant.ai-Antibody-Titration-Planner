@@ -25,6 +25,39 @@ function FlagIcon() {
   )
 }
 
+/**
+ * D2, Nadira's second review. Code plus one line, inside `.series-sticky`.
+ *
+ * At four flags the full-text `FlagList` alone measured 669px at a 947px
+ * viewport, taller than the 650px reference viewport, with no declaration
+ * line in view: the block has to stop growing with flag count, and this is
+ * the half of the fix that lives here rather than in the layout. Each entry
+ * is a `<details>` so the reason is one click away without leaving the
+ * sticky block; the full text is ALSO repeated in a `FlagList` below the
+ * table, per Nadira's own instruction, so a reader who has scrolled past the
+ * sticky block is not sent back up to read it.
+ */
+export function FlagSummaryList({ flags }: { flags: readonly Flag[] }) {
+  if (flags.length === 0) return null
+  return (
+    <ul className="flag-summary-list">
+      {flags.map((flag) => (
+        <li key={flag.code}>
+          <details className="flag-summary">
+            <summary>
+              <strong>{flag.code}</strong>: {flag.summary}
+            </summary>
+            <span>
+              {flag.message}
+              {flag.remedy && <span className="flag-remedy">{flag.remedy}</span>}
+            </span>
+          </details>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export function FlagList({ flags }: { flags: readonly Flag[] }) {
   if (flags.length === 0) return null
   return (

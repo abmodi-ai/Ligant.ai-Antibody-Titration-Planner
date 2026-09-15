@@ -89,7 +89,7 @@ you can see its output it has already rounded.
 
 Same inputs, same outputs. Nothing reads a clock or a random source.
 
-- 226 tests, including the reference case of the specification asserted value by
+- 261 tests, including the reference case of the specification asserted value by
   value, the negative control asserted to raise no flags at all, and every
   rejection and flag condition.
 - An **independent Python reimplementation** in `reimpl/`, written from the
@@ -171,7 +171,7 @@ this repository are written up in `docs/`:
 | Item | State |
 |---|---|
 | 6, the derived tolerances | Three analytic bounds derived and enforced. **Open**, pending sign-off on the derivation record |
-| 7, the one-screen requirement | **Superseded at v0.5.** Restated as a property (a series point is never read apart from its context). **Open**, pending re-measurement against a four-flag declaration set at the reference viewport |
+| 7, the one-screen requirement | **Superseded at v0.5.** Restated as a property (a series point is never read apart from its context) and MET at the reference viewport, measured against a four-flag declaration set, not only the one-flag reference case |
 | 8, the shared result object | **Escalated.** It cannot express a series; C1 does not migrate, the two schemas coexist |
 | 9, the transport and its integrity check | Designed and built |
 | 16, the shipped calculator's conformance | Tie-breaking direction measured, conforms. Displayed precision does not match C4's for most of its range |

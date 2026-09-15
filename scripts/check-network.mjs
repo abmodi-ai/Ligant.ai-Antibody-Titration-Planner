@@ -201,6 +201,41 @@ async function enterReferenceCase(points = '6') {
   await page.waitForTimeout(150)
 }
 
+/**
+ * Nadira's second review, D2. Not the one-flag reference declaration set:
+ * this is the four-flag one (C4-FL-01, C4-FL-03, C4-FL-07, C4-FL-08
+ * together) that measured 669px at a 947px viewport, taller than the
+ * reference viewport itself, before the sticky block was bounded. "Four
+ * flags is a user with a different staining volume, a different cell
+ * number, a top point below the vendor recommendation and a P2 in hand.
+ * That is the target user." The same declaration set is kept permanently in
+ * reimpl/fixtures.json as c4-fx-four-flag-target-user.
+ */
+async function enterFourFlagCase(points = '12') {
+  await page.fill('#stock-value', '0.2')
+  await page.selectOption('#stock-unit', 'mg/mL')
+  await page.selectOption('#stock-mass-basis', 'antibody-protein')
+  await page.selectOption('#stock-source', 'certificate-of-analysis')
+
+  await page.selectOption('#vendor-basis', 'per-test-volume-stated')
+  await page.waitForTimeout(50)
+  await page.fill('#vendor-amount', '5')
+  await page.fill('#vendor-test-volume', '100')
+  await page.selectOption('#vendor-cells-kind', 'stated')
+  await page.waitForTimeout(50)
+  await page.fill('#vendor-cells', '1')
+
+  await page.fill('#staining-volume', '50')
+  await page.fill('#cell-number', '2')
+  await page.fill('#pipetting-minimum', '1')
+
+  await page.selectOption('#top-form', '3')
+  await page.fill('#top-value', '8')
+  await page.fill('#dilution-factor', '2')
+  await page.fill('#points', points)
+  await page.waitForTimeout(200)
+}
+
 await enterReferenceCase()
 
 const firstRow = await page.locator('.series-table tbody tr').first().innerText()
@@ -298,6 +333,13 @@ if (!wholePage.includes(APP_VERSION)) fail('the engine version is not stated on 
  * read apart from the declarations and flags it was designed under.        *
  * ---------------------------------------------------------------------- *
  *
+ * Nadira's second review, D2. Driven against the FOUR-FLAG declaration set
+ * (`enterFourFlagCase`), not the one-flag reference case: measured against
+ * one flag, this check passed while the block itself, on four flags, was
+ * taller than the reference viewport with no declaration in view. Four
+ * flags is the ordinary target user, not an edge case, so this is now the
+ * fixture the property is measured against.
+ *
  * FOURTEEN WINDOW-SCROLL POSITIONS, per acceptance 25 as amended: the page
  * scrolled to its own top, to its own bottom, and with each of the twelve
  * rows aligned to the bottom edge of the viewport. WINDOW scroll and nothing
@@ -317,16 +359,46 @@ if (!wholePage.includes(APP_VERSION)) fail('the engine version is not stated on 
  * pass without a decl/flag check. The check applies only where a series
  * point is actually being read, which is the property being measured.
  */
-await expandPanel(4)
+for (const step of [1, 2, 3, 4]) await expandPanel(step)
 if ((await page.locator('#points').count()) === 0) {
   fail('a collapsed declaration panel could not be reopened')
 } else {
-  await page.fill('#points', '12')
-  await page.waitForTimeout(200)
+  await enterFourFlagCase('12')
 }
 
 const rowCount = await page.locator('.series-table tbody tr').count()
 if (rowCount !== 12) fail(`the series has ${rowCount} rows, expected 12 for acceptance 25`)
+
+// The four flags acceptance 25 is measured against, exactly: named, not
+// counted, so this cannot pass on the wrong four.
+const flagCodesPresent = await page.locator('.rail .flag strong').allInnerTexts()
+for (const code of ['C4-FL-01', 'C4-FL-03', 'C4-FL-07', 'C4-FL-08']) {
+  if (!flagCodesPresent.includes(code)) fail(`the four-flag fixture did not raise ${code}`)
+}
+if (flagCodesPresent.length !== 4) {
+  fail(`the four-flag fixture raised ${flagCodesPresent.length} flags, expected exactly 4`)
+}
+
+/*
+ * The spacer, sized on a FRESH load, before any scroll. Reproduced against
+ * the dev build: the spacer's inline height stayed 0px until a real
+ * mouse-wheel scroll, because the `ResizeObserver`'s first delivery is
+ * scheduled for a later frame rather than read synchronously at attach
+ * time, and nothing scroll-independent forced a re-measure before it
+ * arrived. `window.scrollTo` below does not exercise this: it is a
+ * programmatic scroll, and a defect here would still pass a check that
+ * only measured the sticky block's fit AFTER scrolling had already
+ * triggered a resize. Checked here, before `checkWindowPosition` is called
+ * even once.
+ */
+const spacerHeight = await page.evaluate(() => {
+  const el = document.querySelector('.series-sticky-spacer')
+  return el === null ? null : el.getBoundingClientRect().height
+})
+if (spacerHeight === null) fail('the sticky spacer is not present on the page')
+else if (spacerHeight <= 0) {
+  fail(`the sticky spacer measured ${spacerHeight}px on a fresh load, before any scroll; expected > 0px`)
+}
 
 const fullyVisible = (rect, vh) => rect !== null && rect.top >= -0.5 && rect.bottom <= vh + 0.5
 
@@ -346,54 +418,92 @@ async function nf03State() {
   })
 }
 
-let worstAt = null
-let nf03Failures = 0
-let nf03Checked = 0
+/**
+ * One full sweep of acceptance 25's fourteen positions, returned rather than
+ * accumulated into module state, so it can be run twice: once with every
+ * flag summary collapsed (the state on load) and once with every one
+ * expanded (the state a reviewer produces by reading one). `FlagSummaryList`
+ * is supposed to absorb the expansion inside its own 190px scroll without
+ * growing `.series-sticky` at all; asserting that rather than inferring it
+ * from the CSS is the whole reason this runs twice.
+ */
+async function sweepWindowPositions() {
+  let worstAt = null
+  let failures = 0
+  let checked = 0
 
-async function checkWindowPosition(label) {
-  await page.waitForTimeout(50)
-  const s = await nf03State()
-  // Nothing to protect where nothing is being read.
-  if (!s.anyRowVisible) return
-  nf03Checked += 1
-  const ok = fullyVisible(s.sticky, s.viewportHeight)
-  if (!ok) {
-    nf03Failures += 1
-    if (worstAt === null) worstAt = label
+  async function checkWindowPosition(label) {
+    await page.waitForTimeout(50)
+    const s = await nf03State()
+    // Nothing to protect where nothing is being read.
+    if (!s.anyRowVisible) return
+    checked += 1
+    const ok = fullyVisible(s.sticky, s.viewportHeight)
+    if (!ok) {
+      failures += 1
+      if (worstAt === null) worstAt = label
+    }
   }
+
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await checkWindowPosition('page scrolled to the top')
+
+  const maxScroll = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)
+  await page.evaluate((y) => window.scrollTo(0, y), maxScroll)
+  await checkWindowPosition('page scrolled to the bottom')
+
+  for (let i = 0; i < rowCount; i += 1) {
+    // Absolute document position of this row's bottom edge, so the target is
+    // independent of wherever the page currently happens to be scrolled.
+    const target = await page.evaluate((idx) => {
+      const row = document.querySelectorAll('.series-table tbody tr')[idx]
+      const rect = row.getBoundingClientRect()
+      return Math.max(0, rect.bottom + window.scrollY - window.innerHeight)
+    }, i)
+    await page.evaluate((y) => window.scrollTo(0, y), target)
+    await checkWindowPosition(`row ${i + 1} aligned to the bottom edge`)
+  }
+
+  return { worstAt, failures, checked }
 }
 
-await page.evaluate(() => window.scrollTo(0, 0))
-await checkWindowPosition('page scrolled to the top')
+const collapsedSweep = await sweepWindowPositions()
 
-const maxScroll = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)
-await page.evaluate((y) => window.scrollTo(0, y), maxScroll)
-await checkWindowPosition('page scrolled to the bottom')
+await page.locator('.flag-summary summary').evaluateAll((els) => els.forEach((el) => el.click()))
+await page.waitForTimeout(100)
+const openDetails = await page.locator('.flag-summary[open]').count()
+if (openDetails !== 4) fail(`clicking every flag summary opened ${openDetails} of it, expected 4`)
+const expandedSweep = await sweepWindowPositions()
 
-for (let i = 0; i < rowCount; i += 1) {
-  // Absolute document position of this row's bottom edge, so the target is
-  // independent of wherever the page currently happens to be scrolled.
-  const target = await page.evaluate((idx) => {
-    const row = document.querySelectorAll('.series-table tbody tr')[idx]
-    const rect = row.getBoundingClientRect()
-    return Math.max(0, rect.bottom + window.scrollY - window.innerHeight)
-  }, i)
-  await page.evaluate((y) => window.scrollTo(0, y), target)
-  await checkWindowPosition(`row ${i + 1} aligned to the bottom edge`)
-}
+const nf03Checked = collapsedSweep.checked
+const nf03Failures = collapsedSweep.failures + expandedSweep.failures
+const worstAt =
+  collapsedSweep.worstAt !== null
+    ? `${collapsedSweep.worstAt} (flag summaries collapsed)`
+    : expandedSweep.worstAt !== null
+      ? `${expandedSweep.worstAt} (flag summaries expanded)`
+      : null
 
 if (nf03Checked === 0) {
   fail('acceptance 25 found no window-scroll position at which any series row was in view')
 }
 const layoutNote =
   nf03Failures === 0
-    ? `C4-NF-03 at the reference viewport (1366 x 650): MET, under window scroll, at all ${nf03Checked} of acceptance 25's positions where a row was in view.`
-    : `C4-NF-03 at the reference viewport: NOT MET, under window scroll, at ${nf03Failures} of ${nf03Checked} checked positions, first at "${worstAt}".`
+    ? `C4-NF-03 at the reference viewport (1366 x 650), four-flag fixture: MET, under window scroll, at all ${nf03Checked} of acceptance 25's positions where a row was in view, with every flag summary collapsed and again with every one expanded.`
+    : `C4-NF-03 at the reference viewport, four-flag fixture: NOT MET, under window scroll, at ${nf03Failures} of ${nf03Checked * 2} checked positions across both expansion states, first at "${worstAt}".`
 if (nf03Failures > 0) {
-  fail(`C4-NF-03 is not met at ${nf03Failures} of ${nf03Checked} window-scroll acceptance-25 positions (first: ${worstAt})`)
+  fail(`C4-NF-03 is not met at ${nf03Failures} of ${nf03Checked * 2} window-scroll acceptance-25 positions (collapsed + expanded) on the four-flag fixture (first: ${worstAt})`)
 }
-if (!wholePage.includes('MET at the reference viewport')) {
-  fail('the register does not state the C4-NF-03 conformance result')
+// The register row is checked specifically, not as a substring of the whole
+// page: a page-wide MEASURED elsewhere must not wave this row through, and a
+// page-wide OPEN elsewhere must not fail it either.
+const nf03Row = await page.locator('.register-table tr', { hasText: 'C4-NF-03 conformance' }).innerText()
+if (nf03Failures === 0) {
+  if (!nf03Row.includes('MEASURED') || nf03Row.includes('re-measurement')) {
+    fail('C4-NF-03 fits at the reference viewport on the four-flag fixture, but the register row does not say MEASURED')
+  }
+} else if (!nf03Row.includes('OPEN')) {
+  fail('C4-NF-03 does not fit at the reference viewport on the four-flag fixture, but the register row does not say OPEN')
 }
 
 /* ---------------------------------------------------------------------- *
@@ -472,12 +582,42 @@ if ((await page.locator('footer.site-footer a[href$="LICENSE"]').count()) === 0)
   fail('the footer does not link the LICENSE it asserts')
 }
 
-// The claim about the deployed address, and the flag that gates it.
-if (NETWORK_CLAIM_VERIFIED && !isDeployedRun) {
-  fail(
-    'NETWORK_CLAIM_VERIFIED is set but this was a local run. The strong claim cannot go live on ' +
-      'the strength of a local run: re-run this script against the deployed address.',
-  )
+/*
+ * The claim about the deployed address, and the flag that gates it.
+ *
+ * Open item 18. The previous version of this check failed whenever the flag
+ * was true AND the run was local, on the reasoning that a local run cannot
+ * itself establish a deployed-address claim. True, but it deadlocked `npm
+ * run verify`: the very next local run, AFTER a genuine deployed pass had
+ * set the flag correctly, failed for being local, which blocks the deploy
+ * that would ship that correctly-set flag.
+ *
+ * A local run still cannot ESTABLISH the claim, so it does not get to
+ * decide the flag is fine on its own say-so either. What it can check,
+ * exactly as well as a deployed run can, is whether a WRITTEN RECORD of a
+ * passing deployed run backs the flag, in the same idiom this project's
+ * other open items use. Requiring that record, rather than requiring THIS
+ * run to be the deployed one, is what removes the deadlock without removing
+ * the guarantee: the strong claim still cannot go live on an unrecorded
+ * local run, and now cannot go live on an unrecorded deployed run either.
+ */
+const NETWORK_RECORD_PATH = 'docs/open-item-17-deployed-network-verification.md'
+if (NETWORK_CLAIM_VERIFIED) {
+  if (!existsSync(NETWORK_RECORD_PATH)) {
+    fail(
+      `NETWORK_CLAIM_VERIFIED is set but ${NETWORK_RECORD_PATH} does not exist. Record the passing ` +
+        'deployed-address run there (this script prints exactly that record when it passes against a ' +
+        'deployed address) before the flag may be set.',
+    )
+  } else {
+    const record = readFileSync(NETWORK_RECORD_PATH, 'utf8')
+    if (!record.includes('ACCEPTANCE TEST 17: PASSED')) {
+      fail(`${NETWORK_RECORD_PATH} exists but does not record an ACCEPTANCE TEST 17: PASSED result`)
+    }
+    if (!record.includes(`${SITE_URL}${TOOL_PATH}`)) {
+      fail(`${NETWORK_RECORD_PATH} does not name the deployed address the pass was recorded against`)
+    }
+  }
 }
 if (!NETWORK_CLAIM_VERIFIED && footer.includes('has been verified at its deployed address')) {
   fail('the footer claims a deployed-address verification that has not been recorded')
@@ -530,7 +670,11 @@ console.log(
     layoutNote +
     '\n' +
     (isDeployedRun
-      ? 'ACCEPTANCE TEST 17: PASSED. Set NETWORK_CLAIM_VERIFIED in src/lib/site.ts and redeploy.'
+      ? `ACCEPTANCE TEST 17: PASSED, at ${pageUrl}, ${new Date().toISOString()}.\n` +
+        `Record this pass in ${NETWORK_RECORD_PATH} (date, address, this PASSED line), THEN set\n` +
+        'NETWORK_CLAIM_VERIFIED in src/lib/site.ts and redeploy. The record has to exist first: the next\n' +
+        'local `npm run verify`, after the flag is set, checks for it rather than for this run having been\n' +
+        'the deployed one, which is what lets that local run pass at all.'
       : 'ACCEPTANCE TEST 17 IS NOT SATISFIED BY THIS RUN. It asks for the deployed address, which a\n' +
         'local server cannot stand in for. Deploy, then run:\n' +
         `  node scripts/check-network.mjs ${SITE_URL}${TOOL_PATH}`),

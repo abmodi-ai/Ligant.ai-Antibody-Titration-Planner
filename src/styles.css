@@ -989,6 +989,55 @@ th .guidance-pin-button { text-transform: none; }
 .rail-declarations dt { margin: 0; color: var(--text-muted); font-family: var(--font); }
 .rail-declarations dd { margin: 0; color: var(--text-secondary); }
 
+/* D2, Nadira's second review: code plus one line, not the full flag text,
+ * inside `.series-sticky`. This is what stops the sticky block's height
+ * growing with flag count; the full text still exists, in `FlagList` below
+ * the table. A max-height with its own scroll is a second, independent
+ * bound: even a series naming an unusual number of points in one flag's
+ * one-line summary cannot re-grow the block past a fixed budget, the same
+ * failure mode this whole remedy exists to close off.
+ */
+.flag-summary-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /*
+   * Comfortably above the four-flag target-user case, measured at 100px at
+   * the reference viewport, so that case is nowhere near the scroll
+   * threshold. Still a fixed cap: a series naming enough points to grow
+   * past it scrolls inside this list rather than growing `.series-sticky`
+   * itself.
+   */
+  max-height: 190px;
+  overflow-y: auto;
+}
+.flag-summary {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+.flag-summary summary {
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--attention-wash);
+  border-left: 2px solid var(--brand-amber);
+  list-style: none;
+}
+.flag-summary summary::-webkit-details-marker { display: none; }
+.flag-summary summary strong { font-family: var(--font); }
+.flag-summary[open] summary { border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+.flag-summary > span {
+  display: block;
+  padding: 6px 8px;
+  background: var(--surface-sunken);
+  border-left: 2px solid var(--brand-amber);
+  color: var(--text-secondary);
+}
+
 /* A caption names the table for assistive technology without occupying space. */
 table caption {
   position: absolute;

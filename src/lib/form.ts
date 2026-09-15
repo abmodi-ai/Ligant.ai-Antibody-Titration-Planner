@@ -56,7 +56,18 @@ export interface FormState {
   /** C4-SR-05 and R16. False while the pre-filled suggestion stands. */
   pipettingMinimumEntered: boolean
 
-  topForm: TopPointForm
+  /**
+   * D3, Nadira's second review. A string, not `TopPointForm | ''`: every
+   * other optional select in this form (`stockMassBasis`, `stockSource`) is
+   * already `'' | <string union>`, which is what lets `restoreInputs` keep
+   * retaining it after this change. `TopPointForm` is a NUMBER type, so an
+   * unset value typed `''` and a chosen value typed `3` would disagree in
+   * `typeof`, and `restoreInputs`'s deliberately strict type check discards
+   * anything that does not match `typeof EMPTY_FORM.topForm` on restore,
+   * silently dropping every retained top-point form forever, not only the
+   * ones written before this change.
+   */
+  topForm: '' | `${TopPointForm}`
   topValue: string
   topVolumeUnit: VolumeUnit
   topConcentrationUnit: ConcentrationUnit
@@ -100,7 +111,17 @@ export const EMPTY_FORM: FormState = {
   pipettingMinimum: String(SUGGESTED_PIPETTING_MINIMUM_UL),
   pipettingMinimumEntered: false,
 
-  topForm: 3,
+  /**
+   * C4-SR-01, C4-AB-02 and Nadira's second review (D3). No form is
+   * pre-selected: Nadira typed "1" meaning 1 µg/test into a field silently
+   * defaulted to form 3, concentration, and got a twenty-fold different
+   * series, caught only because she happened to check the summary line. The
+   * unit dropdowns beside it may stay pre-selected, visibly marked as a
+   * suggestion; the form the top point is entered IN changes what every
+   * number below it means, the same reason the mass-basis and provenance
+   * selects already force an explicit choice.
+   */
+  topForm: '',
   topValue: '',
   topVolumeUnit: 'uL',
   topConcentrationUnit: 'ug/mL',
@@ -140,10 +161,17 @@ export function parseNumber(raw: string): number | null {
  * this rule existed is corrected on load rather than trusted.
  */
 export function reconcileTopPoint(form: FormState): { form: FormState; invalidated: boolean } {
-  if (acceptedTopPointForms(form.stockKind).includes(form.topForm)) {
+  // Unset is never invalid: there is nothing yet for a change of stock kind
+  // to have invalidated.
+  if (form.topForm === '') return { form, invalidated: false }
+  if (acceptedTopPointForms(form.stockKind).includes(Number(form.topForm) as TopPointForm)) {
     return { form, invalidated: false }
   }
-  return { form: { ...form, topForm: 1, topValue: '' }, invalidated: true }
+  // D3: cleared to '', not silently relabelled to another form. Form 1 was
+  // the fallback before Nadira's second review; picking any form on the
+  // user's behalf is the exact failure D3 exists to stop, whether it happens
+  // on entry or on reconciliation.
+  return { form: { ...form, topForm: '', topValue: '' }, invalidated: true }
 }
 
 /**
@@ -169,6 +197,10 @@ export function missingDeclarations(form: FormState): string[] {
   if (parseNumber(form.stainingVolume) === null) missing.push('the staining volume')
   if (parseNumber(form.cellNumber) === null) missing.push('the cell number')
   if (parseNumber(form.pipettingMinimum) === null) missing.push('the minimum reliable pipetting volume')
+  // D3. Checked separately from `topValue`: a value with no chosen form is
+  // exactly the silent-default case Nadira's review found, and the two are
+  // independent declarations that can each be missing on their own.
+  if (form.topForm === '') missing.push('the form the top point is entered in')
   if (parseNumber(form.topValue) === null) missing.push('the top point of the series')
   if (parseNumber(form.dilutionFactor) === null) missing.push('the dilution factor between points')
   if (parseNumber(form.points) === null) missing.push('the number of points')
@@ -239,16 +271,23 @@ function vendorDeclaration(form: FormState): VendorDeclaration {
   }
 }
 
-/** The top point, in the form it was entered in. C4-SR-01. */
+/**
+ * The top point, in the form it was entered in. C4-SR-01.
+ *
+ * Called only from `toSeriesInputs`, after `missingDeclarations` has already
+ * required `topForm !== ''`, so the cast is safe: nothing upstream can reach
+ * here with a form still unset.
+ */
 function topPoint(form: FormState): SeriesInputs['topPoint'] {
   const value = parseNumber(form.topValue) ?? 0
-  switch (form.topForm) {
+  const topForm = Number(form.topForm) as TopPointForm
+  switch (topForm) {
     case 1:
       return { form: 1, value: { value, unit: form.topVolumeUnit } }
     case 3:
       return { form: 3, value: { value, unit: form.topConcentrationUnit } }
     default:
-      return { form: form.topForm, value }
+      return { form: topForm, value }
   }
 }
 
@@ -344,6 +383,7 @@ export function panelCompletion(form: FormState): PanelCompletion {
       parseNumber(form.cellNumber) !== null &&
       parseNumber(form.pipettingMinimum) !== null,
     design:
+      form.topForm !== '' &&
       parseNumber(form.topValue) !== null &&
       parseNumber(form.dilutionFactor) !== null &&
       parseNumber(form.points) !== null,

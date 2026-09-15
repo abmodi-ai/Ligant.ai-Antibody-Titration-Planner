@@ -29,7 +29,7 @@
 import { formatSigFigs } from './format'
 import {
   IMPORTED_MASS_BASIS_LABEL,
-  STOCK_MASS_BASIS_LABEL,
+  STOCK_MASS_BASIS_SHORT,
   UNIT_LABEL,
   type ImportedMassBasis,
   type StockMassBasis,
@@ -53,6 +53,16 @@ export interface Flag {
   code: FlagCode
   /** What the flag states, in the terms section 8 requires it to be stated. */
   message: string
+  /**
+   * The same flag, in one line. D2 and I3 share this rather than each
+   * building their own compressed version of `message`: the bounded sticky
+   * block reads it directly, and "Copy for notebook" joins it across flags,
+   * so the two cannot say different things about the same flag. Kept off
+   * `StructuredFlag` in serialise.ts, which builds its shape field by field
+   * from this one and does not carry it forward; adding it there is a
+   * separate, deliberate schema decision, not a side effect of this one.
+   */
+  summary: string
   /** Which declaration or quantity the condition was evaluated on. */
   evaluatedOn: string
   /**
@@ -229,11 +239,18 @@ export function flagVolumeMismatch(
       `a staining volume of ${formatSigFigs(stainingVolumeUl)} µL. The per-test volume does not transfer, and the ` +
       'concentration this would reach cannot be computed here because no stock concentration is stated.'
 
+  const summary = computable
+    ? `vendor volume ${formatSigFigs(vendorTestVolumeUl)} µL is not ${formatSigFigs(stainingVolumeUl)} µL, ` +
+      `${formatSigFigs(factor as number)} times concentration`
+    : `vendor volume ${formatSigFigs(vendorTestVolumeUl)} µL is not ${formatSigFigs(stainingVolumeUl)} µL, ` +
+      'concentration not computable'
+
   return {
     code: 'C4-FL-01',
     kind: 'threshold',
     evaluatedOn: 'the declared staining volume against the vendor recommendation',
     message,
+    summary,
     remedy:
       'Pipetting the recommended amount into this staining volume does not reproduce the concentration the vendor recommended. Use the concentration column rather than the volume column when carrying this recommendation across.',
   }
@@ -246,6 +263,7 @@ export function flagTestVolumeNotStated(): Flag {
     evaluatedOn: 'the vendor recommendation declaration',
     message:
       'The vendor’s intended concentration cannot be determined; the recommendation cannot be transferred to any other staining volume. The series below is fully defined at the declared volume.',
+    summary: 'vendor amount has no test volume, cannot transfer to another staining volume',
     remedy:
       'An amount per test with no test volume states neither a concentration nor an amount per cell. If the datasheet gives a test volume elsewhere, enter it; otherwise treat the recommendation as applying only to the vendor’s own assay.',
   }
@@ -279,14 +297,30 @@ export function flagBelowPipettingMinimum(
       ? `the suggested minimum of ${formatSigFigs(minimumUl)} µL, which has not been changed`
       : `the declared minimum of ${formatSigFigs(minimumUl)} µL`
 
+  /*
+   * I4. Stock volume per test falls monotonically from the top point down, so
+   * the top point (index 1) is the LARGEST stock volume the series asks for:
+   * every other point needs less still. If index 1 is itself below the
+   * minimum, every point is, and a reader scanning a full per-point list
+   * first has to work that out for themselves before they can see that no
+   * part of the series is salvageable as entered. Said once, first, instead.
+   */
+  const topBelowMinimum = points.some((p) => p.index === 1)
+  const leadSentence = topBelowMinimum
+    ? 'No point of this series can be pipetted from stock; the whole series is prepared from an intermediate. '
+    : ''
+
   return {
     code: 'C4-FL-03',
     kind: 'threshold',
     evaluatedOn: 'each point’s computed stock volume against the declared pipetting minimum',
     points: points.map((p) => p.index),
     message:
-      `These points cannot be pipetted directly from stock at this staining volume and against ` +
+      `${leadSentence}These points cannot be pipetted directly from stock at this staining volume and against ` +
       `${minimumSource}: ${named}.`,
+    summary: topBelowMinimum
+      ? `whole series below the pipetting minimum of ${formatSigFigs(minimumUl)} µL, prepare from an intermediate`
+      : `${points.length} point${points.length === 1 ? '' : 's'} below the pipetting minimum of ${formatSigFigs(minimumUl)} µL`,
     remedy:
       'Prepare an intermediate working stock and pipette these points from it. Each point is listed with its dilution factor from stock so the intermediate can be designed against it.',
   }
@@ -299,6 +333,7 @@ export function flagSourceNotRecorded(): Flag {
     evaluatedOn: 'the stock concentration provenance declaration',
     message:
       'Stock concentration provenance not recorded; the series cannot be traced to a source and should not be carried into a method record without one.',
+    summary: 'stock concentration provenance not recorded',
     remedy:
       'Record where the concentration came from: the certificate of analysis, the vendor datasheet, or your own measurement.',
   }
@@ -311,6 +346,7 @@ export function flagConcentrationNotStated(): Flag {
     evaluatedOn: 'the stock declaration',
     message:
       'Mass-based forms are not computable; the series is expressed in forms 1 and 4, plus the vendor multiple where a basis is stated.',
+    summary: 'stock concentration not stated, mass-based forms not computable',
     remedy:
       'A concentration from the certificate of analysis, or an A280 measurement, would make the mass-based forms available. Without one the series is still fully defined as volumes and dilutions.',
   }
@@ -322,6 +358,7 @@ export function flagNoCells(): Flag {
     kind: 'threshold',
     evaluatedOn: 'the cell number',
     message: 'No cells declared; this series describes a no-cell condition.',
+    summary: 'no cells declared, this is a no-cell condition',
     remedy:
       'This is a legitimate control condition and is not an error. Mass per 10⁶ cells is reported as not computable, because there are no cells to express a mass per.',
   }
@@ -336,6 +373,7 @@ export function flagCellNumberMismatch(declaredCells: number, vendorCells: numbe
       `The vendor recommendation was defined at a different cell number, ${formatSigFigs(vendorCells)} against ` +
       `${formatSigFigs(declaredCells)} declared here. Antibody depletion may differ, and the recommendation may not ` +
       'transfer at this cell number even at the same concentration.',
+    summary: `cell number ${formatSigFigs(declaredCells)} is not the vendor's ${formatSigFigs(vendorCells)}`,
     remedy:
       'Whether this matters depends on whether antibody is in excess, which depends on antigen density and affinity. This tool records the difference; it cannot quantify the depletion.',
   }
@@ -352,6 +390,7 @@ export function flagTopBelowRecommendation(
     message:
       `The series begins below the vendor recommendation, at ${formatSigFigs(topUgPerMl)} µg/mL against a ` +
       `recommended ${formatSigFigs(recommendedUgPerMl)} µg/mL; the recommended point is not bracketed by this series.`,
+    summary: `series begins at ${formatSigFigs(topUgPerMl)} µg/mL, below the vendor's ${formatSigFigs(recommendedUgPerMl)} µg/mL`,
     remedy:
       'Raise the top point to at or above the recommendation if you intend the series to span it. A vendor recommendation is a concentration chosen for a stated assay; it is not established to be a saturating one.',
   }
@@ -364,6 +403,7 @@ export function flagImportedConjugateBasis(): Flag {
     evaluatedOn: 'the imported mass-basis declaration',
     message:
       'The molecular weight includes label or payload; the molar form shown is of the conjugate, not of the underlying antibody. The tool does not correct for degree of labelling.',
+    summary: 'molecular weight includes label or payload, molar form is of the conjugate',
     remedy:
       'Where the molar concentration of the antibody itself is wanted rather than of the conjugate, a protein-basis molecular weight is needed. This tool does not convert between the two.',
   }
@@ -380,6 +420,7 @@ export function flagImportedCarriesFlags(
     message:
       'The imported value carries flags, restated here in full: ' +
       imported.map((f) => `${f.code}: ${f.message}`).join(' '),
+    summary: `imported value carries ${imported.length} flag${imported.length === 1 ? '' : 's'} of its own`,
     remedy:
       'These qualify the molecular weight this series’ molar form rests on. They travelled with the value deliberately: a flag that stops at a tool boundary stops doing its work.',
   }
@@ -396,8 +437,9 @@ export function flagMassBasisPair(
     evaluatedOn: 'the stock mass basis against the imported molecular-weight mass basis',
     message:
       `Form 6, the molar concentration, is withheld. ${reason} The stock mass is declared as ` +
-      `${STOCK_MASS_BASIS_LABEL[stockBasis]}; the molecular weight is declared as ` +
+      `${STOCK_MASS_BASIS_SHORT[stockBasis]}; the molecular weight is declared as ` +
       `${IMPORTED_MASS_BASIS_LABEL[importedBasis]}.`,
+    summary: 'form 6 withheld, the stock and molecular-weight mass bases do not form a reportable pair',
     remedy:
       'The tool withholds rather than converting, because correcting between mass bases would need the degree of labelling or the chain composition, and it has neither. Import a molecular weight on a basis matching the stock, or record the basis that is missing.',
   }
@@ -547,10 +589,10 @@ export const CONSTANTS_REGISTER: readonly RegisterEntry[] = [
   {
     id: 'nf-03-conformance',
     label: 'C4-NF-03 conformance',
-    value: 'MET at the reference viewport, under window scroll, at every acceptance-25 position where a row is in view',
+    value: 'MET at the reference viewport, under window scroll, on the four-flag fixture, at every acceptance-25 position where a row is in view',
     basis: 'derived',
     status:
-      'MEASURED. A prior MEASURED claim on this row was wrong and is withdrawn: it scrolled `.series-scroll`, the series table’s own internal region, and never tested the page itself, so it could not have caught the failure it claimed to rule out. Scrolling the window past roughly 600px showed every row and the C4-FL-03 flag with no declaration visible anywhere, because the declaration summaries lived in the left column and the series and flags lived in the right column, two independently-scrolling regions. The remedy is `.series-sticky` in App.tsx: the declaration line and the flag list sit above the table in one block, `position: sticky` scoped to the table they describe, so they stay in the viewport for as long as any row of it does, under ordinary window scroll and nothing else. Measured by scripts/check-network.mjs, in a real browser, driving actual window scroll, at all fourteen of acceptance 25’s positions (the page at its own top, at its own bottom, and each of twelve rows aligned to the viewport’s bottom edge), on every run. SCOPE: this holds for acceptance 25’s reference declaration set. The sticky block can only be as short as the declaration line and the flag text it carries; a series whose flags alone name enough points to exceed 650 px of text would not measure MET at this viewport, a case acceptance 25’s reference series does not reach. Full measurement recorded in docs/open-item-07-layout-check.md.',
+      'MEASURED, re-measured against a four-flag declaration set. A MEASURED claim on this row was twice withdrawn before this one: first because it scrolled `.series-scroll`, the table\'s own internal region, rather than the window; then because it held only for acceptance 25\'s one-flag reference series, and at four flags (FL-01, FL-03, FL-07, FL-08, a staining volume, cell number, top point and pipetting minimum that all differ from the vendor\'s, which is the ordinary target user and not an edge case) the block Nadira reviewed on the deployed page measured 669px at a 947px viewport, taller than the 650px reference viewport itself, with no declaration line in view. `.series-sticky` was rebuilt so the flags inside it do not grow the block with flag count: `FlagSummaryList`, one line each behind a `<details>` expander, itself capped at 190px with its own scroll, open or closed. Measured by scripts/check-network.mjs, in a real browser, driving actual window scroll, at all fourteen of acceptance 25\'s positions, with every flag summary collapsed and then again with every one expanded, against `enterFourFlagCase`, the same declaration set kept permanently in reimpl/fixtures.json as c4-fx-four-flag-target-user. SCOPE: this holds for that four-flag declaration set, in both expansion states, at the reference viewport. It is NOT a bound on flag count or series length in general: the flag-summary scroll only bounds the FLAGS, and the declaration line above it has no scroll of its own, so a vendor basis whose label and values print longer than `per-test-volume-stated`\'s (measured here) is not covered by this row and has not been measured. Full measurement recorded in docs/open-item-07-layout-check.md.',
   },
   {
     id: 'reference-viewport',

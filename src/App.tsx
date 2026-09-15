@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Masthead } from './components/shared/Masthead'
 import { SiteFooter } from './components/shared/SiteFooter'
 import { SkipLink } from './components/shared/SkipLink'
-import { FlagList, RejectionList } from './components/shared/FlagList'
+import { FlagList, FlagSummaryList, RejectionList } from './components/shared/FlagList'
 import { LigantMark } from './components/LigantMark'
 import { DeclarationPanel } from './components/DeclarationPanel'
 import { Method } from './components/Method'
-import { SeriesTable, notebookLine } from './components/SeriesTable'
+import { SeriesTable, notebookLine, vendorBasisSummary } from './components/SeriesTable'
 import { computeSeries, type Outcome } from './lib/compute'
 import {
   EMPTY_FORM,
@@ -184,9 +184,14 @@ function panelSummaries(form: FormState) {
     4: 'as a dilution factor from stock',
     5: `${unit('ug')} per 10\u2076 cells`,
   }
+  // D3: the summary text only ever renders once the panel is complete, which
+  // now requires `topForm` to be chosen, so this branch is unreachable in
+  // practice; kept explicit rather than trusting that invariant silently.
   const design =
-    `top point ${form.topValue} ${FORM_WORD[form.topForm]}, ` +
-    `${form.dilutionFactor}-fold, ${form.points} points`
+    form.topForm === ''
+      ? `top point ${form.topValue}, form not yet chosen, ${form.dilutionFactor}-fold, ${form.points} points`
+      : `top point ${form.topValue} ${FORM_WORD[Number(form.topForm)]}, ` +
+        `${form.dilutionFactor}-fold, ${form.points} points`
 
   return {
     stock: `${stock}. Source: ${source}.`,
@@ -268,16 +273,36 @@ export default function App() {
   const result = outcome !== null && outcome.ok ? outcome : null
   const rejections = outcome !== null && !outcome.ok ? outcome.rejections : []
 
-  // Re-attaches only on mount/unmount of `.series-sticky`; the observer then
-  // tracks every subsequent size change (a longer flag list, a wider value)
-  // on its own, without the effect needing to re-run.
-  useEffect(() => {
+  /*
+   * Re-attaches only on mount/unmount of `.series-sticky`; the observer then
+   * tracks every subsequent size change (a longer flag list, a wider value)
+   * on its own, without the effect needing to re-run.
+   *
+   * `useLayoutEffect`, and a synchronous `el.offsetHeight` read BEFORE the
+   * observer is attached: on a fresh load, the spacer measured `0px` and
+   * stayed there until the reader scrolled, because the observer's first
+   * callback is a delivery `ResizeObserver` schedules for a later frame, not
+   * a synchronous read at attach time, and self-hosted fonts finishing their
+   * swap after that first paint changes the block's height without a scroll
+   * event to trigger a re-measure. A synchronous read here, before paint,
+   * does not depend on that delivery arriving at all; the observer still
+   * owns every change after it.
+   *
+   * Both reads go through `el.offsetHeight` rather than the observer's own
+   * `entries[0].contentRect`, deliberately: `contentRect` is the CONTENT
+   * box, excluding the 2px `padding-top` `.series-sticky` carries, so
+   * reading it from the observer while the mount read used the border box
+   * would under-measure by exactly that padding on the first resize.
+   */
+  useLayoutEffect(() => {
     const el = stickyRef.current
     if (el === null) {
       setStickyHeight(0)
       return
     }
-    const observer = new ResizeObserver((entries) => setStickyHeight(entries[0].contentRect.height))
+    const measure = () => setStickyHeight(el.offsetHeight)
+    measure()
+    const observer = new ResizeObserver(measure)
     observer.observe(el)
     return () => observer.disconnect()
   }, [result !== null])
@@ -369,7 +394,9 @@ export default function App() {
                         />
                       </div>
                       <div className="field">
-                        <label htmlFor="stock-unit">Unit</label>
+                        <label htmlFor="stock-unit">
+                          Unit <span className="suggestion-marker">suggestion</span>
+                        </label>
                         <select
                           id="stock-unit"
                           value={form.stockUnit}
@@ -648,7 +675,9 @@ export default function App() {
                     />
                   </div>
                   <div className="field">
-                    <label htmlFor="staining-volume-unit">Unit</label>
+                    <label htmlFor="staining-volume-unit">
+                      Unit <span className="suggestion-marker">suggestion</span>
+                    </label>
                     <select
                       id="staining-volume-unit"
                       value={form.stainingVolumeUnit}
@@ -682,7 +711,9 @@ export default function App() {
                     />
                   </div>
                   <div className="field">
-                    <label htmlFor="cell-number-unit">Unit</label>
+                    <label htmlFor="cell-number-unit">
+                      Unit <span className="suggestion-marker">suggestion</span>
+                    </label>
                     <select
                       id="cell-number-unit"
                       value={form.cellNumberUnit}
@@ -756,10 +787,11 @@ export default function App() {
                       id="top-form"
                       value={form.topForm}
                       onChange={(e) => {
-                        set('topForm')(Number(e.target.value) as TopPointForm)
+                        set('topForm')(e.target.value as FormState['topForm'])
                         setTopPointNeedsReentry(false)
                       }}
                     >
+                      <option value="">select</option>
                       {TOP_FORM_OPTIONS.filter((option) =>
                         acceptedTopPointForms(form.stockKind).includes(option.form),
                       ).map((option) => (
@@ -881,9 +913,17 @@ export default function App() {
                       point is never read apart from the declarations and
                       flags it was designed under. `.series-sticky` pins this
                       block to the top of the viewport for as long as any row
-                      of the table below it is in view, under window scroll,
-                      so the property holds regardless of how many rows or how
-                      much flag text a given series has. Retained/default
+                      of the table below it is in view, under window scroll.
+                      D2, Nadira's second review: at four flags the earlier
+                      version of this block, carrying full flag text, measured
+                      taller than the reference viewport with no declaration
+                      in view, so the property held only for a one-flag
+                      series. Bounded now in two ways that do not depend on
+                      how many flags a series happens to raise: the
+                      declaration line is six fields, not a paragraph per
+                      field, and the flags are `FlagSummaryList`, one line
+                      each behind an expander, with a fixed-height scroll of
+                      its own as a second, independent floor. Retained/default
                       marks are C4-ST-03's other half: a reader must not read
                       a row under a value carried from a previous session, or
                       pre-filled by a suggestion, without being told so where
@@ -906,17 +946,31 @@ export default function App() {
                           </dd>
                         </div>
                         <div>
+                          {/* I1: added to the required-values list this row
+                              carries, alongside the vendor recommendation
+                              values already folded into "Vendor basis" below. */}
+                          <dt>Stock concentration</dt>
+                          <dd>
+                            {result.inputs.stock.kind === 'stated'
+                              ? `${result.inputs.stock.concentration.value} ${UNIT_LABEL[result.inputs.stock.concentration.unit]}, ${STOCK_SOURCE_LABEL[result.inputs.stockSource]}`
+                              : 'not stated by the vendor'}
+                            <Retained when={retained.stockConcentration || retained.stockSource} />
+                          </dd>
+                        </div>
+                        <div>
                           <dt>Vendor basis</dt>
                           <dd>
-                            {VENDOR_BASIS_LABEL[result.inputs.vendor.basis]}
+                            {vendorBasisSummary(result)}
                             <Retained when={retained.vendorBasis} />
                           </dd>
                         </div>
                         <div>
+                          {/* I2: the short label. The 30-word guidance stays
+                              only in the dropdown that chooses this. */}
                           <dt>Stock mass basis</dt>
                           <dd>
                             {result.inputs.stock.kind === 'stated'
-                              ? STOCK_MASS_BASIS_LABEL[result.inputs.stock.massBasis]
+                              ? STOCK_MASS_BASIS_SHORT[result.inputs.stock.massBasis]
                               : 'not stated by the vendor'}
                             <Retained when={retained.stockMassBasis} />
                           </dd>
@@ -930,7 +984,7 @@ export default function App() {
                           </dd>
                         </div>
                       </dl>
-                      <FlagList flags={result.flags} />
+                      <FlagSummaryList flags={result.flags} />
                       {result.flags.length === 0 && (
                         <p className="hint">
                           No flags raised. The declarations are consistent and every point can be
@@ -940,10 +994,14 @@ export default function App() {
                       )}
                     </div>
                     <SeriesTable result={result} />
+                    {/* D2: the full flag text, moved out of the sticky block
+                        and below the table, per Nadira's instruction; the
+                        sticky block carries only the compact form above. */}
+                    <FlagList flags={result.flags} />
                     {/* Runway for `.series-sticky` to stay stuck through the last
                         row; see the effect above for why it is measured, not
                         fixed. */}
-                    <div aria-hidden="true" style={{ height: stickyHeight }} />
+                    <div aria-hidden="true" className="series-sticky-spacer" style={{ height: stickyHeight }} />
                   </>
                 )}
               </div>
@@ -984,7 +1042,7 @@ export default function App() {
                     <dt>Stock mass basis</dt>
                     <dd className="prose-dd">
                       {result.inputs.stock.kind === 'stated'
-                        ? STOCK_MASS_BASIS_LABEL[result.inputs.stock.massBasis]
+                        ? STOCK_MASS_BASIS_SHORT[result.inputs.stock.massBasis]
                         : 'no concentration stated by the vendor'}
                     </dd>
                     <dt>Vendor basis</dt>

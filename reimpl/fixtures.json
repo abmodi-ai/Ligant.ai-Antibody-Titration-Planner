@@ -203,6 +203,69 @@
         "points": 6,
         "imported": null
       }
+    },
+    {
+      "id": "c4-fx-05-direction-concentrating",
+      "assumption": "C4-FL-01's own direction defect, as a fixture rather than only a unit test: a staining volume BELOW the vendor's test volume concentrates the vendor's recommended amount, so the multiple at the staining volume must exceed the multiple at the vendor's own test volume. An earlier build printed the inverse ratio for this exact declaration set (100 uL vendor, 50 uL staining), found by Nadira's review.",
+      "inputs": {
+        "stock": { "kind": "stated", "concentration": { "value": 0.2, "unit": "mg/mL" }, "massBasis": "antibody-protein" },
+        "stockSource": "certificate-of-analysis",
+        "vendor": {
+          "basis": "per-test-volume-stated",
+          "amountPerTest": { "kind": "volume", "value": { "value": 5, "unit": "uL" } },
+          "testVolume": { "value": 100, "unit": "uL" },
+          "cellNumber": "not-stated"
+        },
+        "stainingVolume": { "value": 50, "unit": "uL" },
+        "cellNumber": { "value": 1, "unit": "cells-1e6" },
+        "pipettingMinimum": { "value": 2, "provenance": "entered" },
+        "topPoint": { "form": 2, "value": 1 },
+        "dilutionFactor": 2,
+        "points": 3,
+        "imported": null
+      }
+    },
+    {
+      "id": "c4-fx-05-direction-diluting",
+      "assumption": "The other direction of the same defect: a staining volume ABOVE the vendor's test volume dilutes the recommended amount, so the multiple at the staining volume must be below the multiple at the vendor's own test volume. Same stock and vendor declaration as c4-fx-05-direction-concentrating; only the staining volume differs, so the two fixtures isolate the one variable the defect turned on.",
+      "inputs": {
+        "stock": { "kind": "stated", "concentration": { "value": 0.2, "unit": "mg/mL" }, "massBasis": "antibody-protein" },
+        "stockSource": "certificate-of-analysis",
+        "vendor": {
+          "basis": "per-test-volume-stated",
+          "amountPerTest": { "kind": "volume", "value": { "value": 5, "unit": "uL" } },
+          "testVolume": { "value": 100, "unit": "uL" },
+          "cellNumber": "not-stated"
+        },
+        "stainingVolume": { "value": 200, "unit": "uL" },
+        "cellNumber": { "value": 1, "unit": "cells-1e6" },
+        "pipettingMinimum": { "value": 2, "provenance": "entered" },
+        "topPoint": { "form": 2, "value": 1 },
+        "dilutionFactor": 2,
+        "points": 3,
+        "imported": null
+      }
+    },
+    {
+      "id": "c4-fx-four-flag-target-user",
+      "assumption": "Nadira's second review, D2: the declaration set behind the four-flag fixture the layout remedy is measured against (C4-FL-01, C4-FL-03, C4-FL-07 and C4-FL-08 together). Not an edge case: a different staining volume, a different cell number, a top point below the vendor recommendation and a pipetting minimum in hand together describe an ordinary user, not an unusual one. Kept in the shared fixture set so the arithmetic behind all four flags stays cross-checked, alongside acceptance 25's own use of this same declaration set at the reference viewport.",
+      "inputs": {
+        "stock": { "kind": "stated", "concentration": { "value": 0.2, "unit": "mg/mL" }, "massBasis": "antibody-protein" },
+        "stockSource": "certificate-of-analysis",
+        "vendor": {
+          "basis": "per-test-volume-stated",
+          "amountPerTest": { "kind": "volume", "value": { "value": 5, "unit": "uL" } },
+          "testVolume": { "value": 100, "unit": "uL" },
+          "cellNumber": { "value": 1, "unit": "cells-1e6" }
+        },
+        "stainingVolume": { "value": 50, "unit": "uL" },
+        "cellNumber": { "value": 2, "unit": "cells-1e6" },
+        "pipettingMinimum": { "value": 1, "provenance": "entered" },
+        "topPoint": { "form": 3, "value": { "value": 8, "unit": "ug/mL" } },
+        "dilutionFactor": 2,
+        "points": 12,
+        "imported": null
+      }
     }
   ]
 }

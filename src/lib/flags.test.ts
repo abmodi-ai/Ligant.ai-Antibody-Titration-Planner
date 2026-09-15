@@ -86,6 +86,9 @@ describe('C4-FL-01, a staining volume differing from the vendor test volume', ()
       expect(flag?.message).toMatch(/2\.00 times the recommended concentration/)
       // The bug's own number must not reappear.
       expect(flag?.message).not.toMatch(/0\.500/)
+      // D2. `summary` is what `FlagSummaryList` and the notebook line show;
+      // it has to carry the direction too, not just the full message.
+      expect(flag?.summary).toMatch(/2\.00 times concentration/)
     })
 
     it('a staining volume ABOVE the vendor test volume DILUTES it, factor below 1', () => {
@@ -163,6 +166,31 @@ describe('C4-FL-03, points below the declared pipetting minimum', () => {
     const result = run({ points: 6 })
     const flag = result.flags.find((f) => f.code === 'C4-FL-03')
     expect(flag?.points).toEqual([3, 4, 5, 6])
+  })
+
+  it('I4: leads with one sentence when the top point itself is below the minimum, before the list', () => {
+    // Nadira's second review. Stock volume per test falls monotonically from
+    // the top point down, so if the top point (index 1) is below the
+    // minimum, every point is, and the whole series needs an intermediate,
+    // not just its lower points. The top point's volume here is 5.00 µL
+    // (BASE's usual case), so a minimum of 10 µL puts it, and everything
+    // below it, under the threshold.
+    const wholeSeries = run({ pipettingMinimum: { value: 10, provenance: 'entered' } })
+    const flag = wholeSeries.flags.find((f) => f.code === 'C4-FL-03')
+    expect(flag?.points).toEqual([1, 2, 3])
+    expect(flag?.message).toMatch(/^No point of this series can be pipetted from stock/)
+    expect(flag?.summary).toMatch(/^whole series below the pipetting minimum/)
+    // The per-point list, with dilution factors, still follows the lead
+    // sentence: it is additional, not replaced by it.
+    expect(flag?.message).toMatch(/point 1 at 5\.00 µL/)
+  })
+
+  it('does not lead with the whole-series sentence when only some points are below the minimum', () => {
+    const partial = run({ points: 6 })
+    const flag = partial.flags.find((f) => f.code === 'C4-FL-03')
+    expect(flag?.points).toEqual([3, 4, 5, 6])
+    expect(flag?.message).not.toMatch(/No point of this series can be pipetted/)
+    expect(flag?.summary).toMatch(/^4 points below the pipetting minimum/)
   })
 
   it('says when the minimum is the untouched suggestion rather than a decision', () => {
@@ -309,7 +337,10 @@ describe('C4-FL-07, a cell number differing from the vendor stated one', () => {
     }) as const
 
   it('is raised where the numbers differ, per C4-FX-15', () => {
-    expect(codes(run({ vendor: vendorWithCells(5) }))).toContain('C4-FL-07')
+    const result = run({ vendor: vendorWithCells(5) })
+    expect(codes(result)).toContain('C4-FL-07')
+    const flag = result.flags.find((f) => f.code === 'C4-FL-07')
+    expect(flag?.summary).toMatch(/cell number .* is not the vendor's/)
   })
 
   it('is not raised where they agree', () => {
@@ -354,6 +385,7 @@ describe('C4-FL-08, a series beginning below the vendor recommendation', () => {
     expect(flag?.message).toMatch(/not bracketed by this series/)
     expect(flag?.message.toLowerCase()).not.toContain('saturat')
     expect(flag?.remedy?.toLowerCase()).not.toContain('saturating the target')
+    expect(flag?.summary).toMatch(/series begins at .* below the vendor's/)
   })
 
   it('is not raised where the top point is at or above the recommendation', () => {
@@ -507,6 +539,7 @@ describe('the disclosure lists the page renders', () => {
     // developer can derive and enforce a bound today; only NADIRA's review of
     // the derivation record moves a row off OPEN, and the register must not
     // claim that review on her behalf.
+    //
     const open = CONSTANTS_REGISTER.filter((entry) => entry.status.startsWith('OPEN'))
     expect(open.map((e) => e.id).sort()).toEqual([
       'ratio-test-tolerance',
@@ -594,18 +627,20 @@ describe('the disclosure lists the page renders', () => {
     expect(viewport?.status).toMatch(/Basis configuration:/)
   })
 
-  it('measures C4-NF-03 conformance under window scroll, not the withdrawn region-scroll check', () => {
-    // A prior MEASURED claim here was wrong: it scrolled `.series-scroll`'s
-    // own region, never the window, and missed the declaration/series split
-    // across two independently-scrolling columns, a failure Nadira's review
-    // found by scrolling the page itself. The register must name the actual
-    // mechanism (`.series-sticky`) and the actual axis (window scroll) rather
-    // than repeat the withdrawn claim.
+  it('measures C4-NF-03 conformance against the four-flag fixture, not the one-flag reference case', () => {
+    // The block that measured MET against the one-flag reference series
+    // measured 669px at a 947px viewport under four flags, taller than the
+    // 650px reference viewport, with no declaration line in view. Four flags
+    // is the ordinary target user, not an edge case. `.series-sticky` was
+    // rebuilt to bound its height independently of flag count, and
+    // scripts/check-network.mjs, run against a real browser, confirms the
+    // rebuilt block fits at the reference viewport on the four-flag fixture
+    // before this row is allowed to read MEASURED again.
     const nf03 = CONSTANTS_REGISTER.find((e) => e.id === 'nf-03-conformance')
     expect(nf03?.status).toMatch(/^MEASURED/)
     expect(nf03?.value).toMatch(/MET at the reference viewport/)
-    expect(nf03?.value).toMatch(/window scroll/)
-    expect(nf03?.status).toMatch(/series-scroll/)
+    expect(nf03?.value).toMatch(/four-flag fixture/)
+    expect(nf03?.status).toMatch(/four-flag/)
     expect(nf03?.status).toMatch(/series-sticky/)
     expect(CONSTANTS_REGISTER.some((e) => e.id === 'viewport-supported')).toBe(false)
   })
