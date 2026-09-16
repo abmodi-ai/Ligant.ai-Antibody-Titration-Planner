@@ -9,13 +9,21 @@
  * contacts anything: a mailto is handled by the reader's own mail client and
  * fires no request, so the privacy claim is untouched.
  *
- * THE NETWORK CLAIM IS GATED. C4-NF-01 is an environment claim about the SERVED
- * page and acceptance 17 is the only thing that can establish it, since a local
- * server over dist/ does not exercise the host or its CDN. So the strong
- * sentence is shown only once NETWORK_CLAIM_VERIFIED has been set, which is a
- * deployment step; until then the page states the weaker thing that is actually
- * established. An accurate weaker claim is worth more than an unverified
- * stronger one.
+ * THE PRIVACY PARAGRAPHS ARE PLAIN LANGUAGE, DELIBERATELY, for a reader who is
+ * not going to read the technical privacy section elsewhere on the page.
+ * "We do count visits" is server-side hosting-provider traffic logging, a fact
+ * about the infrastructure rather than something this page's own code does; it
+ * does not conflict with "no third-party code of any kind", which is a claim
+ * about what runs on the page itself.
+ *
+ * THE ONE CLAUSE STILL GATED is "no third-party code ... runs on this page",
+ * and only that clause: C4-NF-01 is an environment claim about the SERVED page
+ * and acceptance 17 is the only thing that can establish it, since a local
+ * server over dist/ does not exercise the host or its CDN. So the unqualified
+ * form is shown only once NETWORK_CLAIM_VERIFIED has been set, which is a
+ * deployment step; until then the page says what is actually established,
+ * which is narrower. An accurate narrower claim is worth more than an
+ * unverified broader one.
  */
 import { useState } from 'react'
 import {
@@ -27,6 +35,7 @@ import {
   REPO_URL,
   TOOL_NAME,
 } from '../../lib/site'
+import { SCOPE_STATEMENT } from '../../lib/flags'
 
 /**
  * The citation, in three pieces, so what is shown and what is copied cannot
@@ -78,31 +87,38 @@ export function SiteFooter() {
       <div className="footer-grid">
         <div className="footer-prose">
           <p>
-            Ligant Bench Tools are free and open source under Apache 2.0, for research and
-            educational use. They run entirely in your browser.
+            Your data stays in your browser. Everything you enter into this tool is calculated on
+            your own device and never sent anywhere. We do not see it, store it, or have any way to
+            retrieve it. Closing the page ends it.
+          </p>
+          <p>
+            There is no account and no tracking of you. No login, no sign up, no cookies for
+            advertising, no analytics scripts, and no third-party code of any kind{' '}
+            {NETWORK_CLAIM_VERIFIED ? (
+              <>runs on this page, confirmed against the page as served, not only against the code.</>
+            ) : (
+              <>
+                is in the code we publish, confirmed by scanning it and running it in a real browser.
+                The page as served has not yet been checked the same way.
+              </>
+            )}
+          </p>
+          <p>
+            We do count visits. Our hosting provider records basic traffic: which pages get opened,
+            how often, and roughly where in the world from. Because we collect nothing about who you
+            are, this is the only signal we have about whether these tools are useful and which one
+            to build next.
+          </p>
+          <p>
+            Ligant Bench Tools are free and open source under Apache 2.0.
             {REPO_URL && (
               <>
                 {' '}
                 Every figure on this page comes from code you can read, download or run yourself, at{' '}
                 <a href={REPO_URL}>{REPO_URL.replace('https://', '')}</a>.
               </>
-            )}
-          </p>
-          <p>
-            {NETWORK_CLAIM_VERIFIED ? (
-              <>
-                This page has been verified at its deployed address to contact no third party and to
-                transmit nothing you enter.
-              </>
-            ) : (
-              <>
-                A static scan and a real browser confirm that the build contacts no third party and
-                transmits nothing you enter. That check is on the build artefact. The deployed
-                address has not yet been verified, and what a host inserts into a response
-                afterwards is a real failure mode rather than a hypothetical one, so this page does
-                not yet make the stronger claim.
-              </>
-            )}
+            )}{' '}
+            <strong>{SCOPE_STATEMENT}</strong>
           </p>
           <p>
             These tools are standalone calculators. If your lab needs more than they cover, please

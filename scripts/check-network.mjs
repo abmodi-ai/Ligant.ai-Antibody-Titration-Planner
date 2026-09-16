@@ -619,8 +619,19 @@ if (NETWORK_CLAIM_VERIFIED) {
     }
   }
 }
-if (!NETWORK_CLAIM_VERIFIED && footer.includes('has been verified at its deployed address')) {
-  fail('the footer claims a deployed-address verification that has not been recorded')
+/*
+ * A structural check on top of the record check above: the footer's claim is
+ * a ternary keyed on NETWORK_CLAIM_VERIFIED (SiteFooter.tsx), which already
+ * guarantees the rendered text cannot disagree with the flag. This asserts
+ * that guarantee held, rather than trusting it: a future edit could replace
+ * the ternary with a hardcoded string and still pass every check above.
+ */
+if (NETWORK_CLAIM_VERIFIED) {
+  if (!footer.includes('confirmed against the page as served')) {
+    fail('NETWORK_CLAIM_VERIFIED is set but the footer does not state the deployed-address-confirmed claim')
+  }
+} else if (footer.includes('confirmed against the page as served')) {
+  fail('the footer claims a deployed-address confirmation that has not been recorded')
 }
 
 /* ---------------------------------------------------------------------- *
