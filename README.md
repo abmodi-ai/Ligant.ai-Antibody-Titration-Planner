@@ -89,7 +89,7 @@ you can see its output it has already rounded.
 
 Same inputs, same outputs. Nothing reads a clock or a random source.
 
-- 261 tests, including the reference case of the specification asserted value by
+- 278 tests, including the reference case of the specification asserted value by
   value, the negative control asserted to raise no flags at all, and every
   rejection and flag condition.
 - An **independent Python reimplementation** in `reimpl/`, written from the
@@ -115,8 +115,15 @@ origin; requests are recorded rather than blocked, so what it proves is that the
 code never tries.
 
 Both of those are checks on the build. The stronger claim, about the page as
-served, needs a run against the deployed address, and the footer does not make
-that claim until one has been recorded.
+served, needs a run against the deployed address. That run has been made, and
+its record is `docs/open-item-17-deployed-network-verification.md`, so the
+footer states it.
+
+It is a snapshot rather than a guarantee, and the page says so in those terms.
+It establishes what the deployed address served when it was checked; it cannot
+establish what a future deploy, a Cloudflare configuration change or a
+host-side injection will serve. That is why the check is re-run after every
+deploy, and why the record carries a date and an address rather than a tick.
 
 The tool writes one key, `c4.state.v1`, holding the declarations currently on
 screen so a reload does not discard work in progress. Anything restored from it
@@ -158,10 +165,20 @@ CDN:
 node scripts/check-network.mjs https://benchtools.ligant.ai/antibody-titration-planner/
 ```
 
-Only once that prints `ACCEPTANCE TEST 17: PASSED` should
-`NETWORK_CLAIM_VERIFIED` in `src/lib/site.ts` be set and the site redeployed.
-The script fails if that flag is set while the run was local, so the claim
-cannot go live on the strength of a local run.
+`NETWORK_CLAIM_VERIFIED` in `src/lib/site.ts` is already set, on the strength
+of the two passes recorded in
+`docs/open-item-17-deployed-network-verification.md`. **Re-run this after every
+deploy**: acceptance 17 is a claim about the page as served, so it lapses the
+moment that page changes, which is why the record carries a second run made
+after the input-guidance rework rather than resting on the first.
+
+When it passes, paste the printed record into that file. What gates the flag is
+the record, not the run: a local `npm run verify` checks that a written,
+addressed, passing record backs the flag, rather than demanding that this
+particular run be the deployed one. That distinction exists because the earlier
+rule deadlocked, a local run failing merely for being local blocked the deploy
+that would have shipped the correctly-set flag. A local run still cannot
+establish the claim, and still does not get to wave it through unrecorded.
 
 ## Status and limitations
 
@@ -175,6 +192,7 @@ this repository are written up in `docs/`:
 | 8, the shared result object | **Escalated.** It cannot express a series; C1 does not migrate, the two schemas coexist |
 | 9, the transport and its integrity check | Designed and built |
 | 16, the shipped calculator's conformance | Tie-breaking direction measured, conforms. Displayed precision does not match C4's for most of its range |
+| 17, the deployed-address verification | **Passed and recorded**, 16 September 2026, and again the same day after the page changed. Re-run after every deploy |
 
 One limitation is worth knowing before you use this:
 

@@ -22,8 +22,10 @@
  *
  * The two are held together by NETWORK_CLAIM_VERIFIED in src/lib/site.ts. The
  * footer makes the strong claim only when that flag is set, and this script
- * FAILS if the flag is set and the run was local, so the claim cannot go live
- * on the strength of a local run.
+ * fails if the flag is set without a written record of a passing deployed run
+ * behind it, so the claim cannot go live unrecorded. The record, not this run,
+ * is what gates the flag: see the block at NETWORK_RECORD_PATH below for why
+ * requiring THIS run to be the deployed one deadlocked and was changed.
  *
  * Requests are RECORDED, NEVER BLOCKED, deliberately. What this proves is that
  * the code never tries to reach another origin at all, which is a stronger
