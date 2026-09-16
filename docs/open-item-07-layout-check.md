@@ -76,7 +76,7 @@ and each of the twelve rows aligned to the viewport's bottom edge) are
 checked at whichever of those actually show a row in view, now against the
 four-flag declaration set (`enterFourFlagCase` in `scripts/check-network.mjs`,
 kept permanently in `reimpl/fixtures.json` as
-`c4-fx-four-flag-target-user`) rather than the one-flag reference case: 0.2
+`c4-fx-24-four-flag-target-user`) rather than the one-flag reference case: 0.2
 mg/mL stock, staining volume 50 µL against a vendor test volume of 100 µL,
 2 × 10⁶ cells against a vendor's stated 1 × 10⁶, top point 8 µg/mL against a
 vendor recommendation of 10.0 µg/mL, pipetting minimum 1 µL entered, 2-fold,

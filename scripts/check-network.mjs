@@ -209,7 +209,7 @@ async function enterReferenceCase(points = '6') {
  * flags is a user with a different staining volume, a different cell
  * number, a top point below the vendor recommendation and a P2 in hand.
  * That is the target user." The same declaration set is kept permanently in
- * reimpl/fixtures.json as c4-fx-four-flag-target-user.
+ * reimpl/fixtures.json as c4-fx-24-four-flag-target-user.
  */
 async function enterFourFlagCase(points = '12') {
   await page.fill('#stock-value', '0.2')
@@ -521,12 +521,270 @@ if (storage.session.length > 0) {
   fail(`the page writes sessionStorage: ${storage.session.join(', ')}`)
 }
 
-// C4-ST-03: nothing persists across a reload unmarked.
+/* ---------------------------------------------------------------------- *
+ * The input-guidance instruction, acceptance T1 to T12                     *
+ * ---------------------------------------------------------------------- *
+ *
+ * Guidance moved out of paragraphs under each control and behind a trigger
+ * on its label (C4-OUT-12), and the state markers went from unexplained
+ * amber chips to quiet, explained, clearable annotations. Both are page copy
+ * and interaction on a deployed tool, so both are measured here, in a real
+ * browser, rather than asserted.
+ */
+
+/* T2. No inline help paragraph longer than eight words remains under an
+ * input. Scoped to the four declaration panels: the Method panel below them
+ * is prose by design and is not an input, and the results column is not
+ * "under an input" either. `.field-note`, the message explaining that a top
+ * point was CLEARED, is deliberately not `.hint`: it says what happened to a
+ * value, not what to put in the field. */
+for (let step = 1; step <= 4; step += 1) {
+  const hints = await page.locator('.stack > .panel').nth(step - 1).locator('p.hint').allInnerTexts()
+  for (const hint of hints) {
+    const words = hint.trim().split(/\s+/).length
+    if (words > 8) fail(`T2: declaration panel ${step} still carries a ${words}-word inline hint`)
+  }
+}
+
+/*
+ * T1. Every field the instruction lists has a trigger, and the copy behind it
+ * is the copy that was specified. Read from src/lib/guidance.ts textually,
+ * the same way this script already reads src/lib/site.ts, because the page's
+ * own rendering is exactly what is being checked and cannot also be the
+ * reference for it.
+ */
+const guidanceSource = readFileSync('src/lib/guidance.ts', 'utf8')
+const guidance = {}
+{
+  const body = guidanceSource.slice(guidanceSource.indexOf('FIELD_GUIDANCE'))
+  const entry = /^\s*'?([a-z-]+)'?:\s*$|^\s*'?([a-z-]+)'?:\s*'((?:[^'\\]|\\.)*)',?\s*$/gm
+  let match
+  while ((match = entry.exec(body)) !== null) {
+    if (match[2] !== undefined) {
+      guidance[match[2]] = match[3]
+    } else {
+      // Key on its own line, value on the next.
+      const rest = body.slice(entry.lastIndex)
+      const value = /^\s*'((?:[^'\\]|\\.)*)',?\s*$/m.exec(rest)
+      if (value !== null) guidance[match[1]] = value[1]
+    }
+  }
+}
+const guidedIds = Object.keys(guidance)
+if (guidedIds.length < 18) fail(`T1: only ${guidedIds.length} guidance entries were parsed, expected 18`)
+
+for (const id of guidedIds) {
+  const trigger = page.locator(`[data-help-for="${id}"]`)
+  if ((await trigger.count()) === 0) {
+    fail(`T1: the field ${id} has no guidance trigger`)
+    continue
+  }
+  // T5: the accessible name names the field it is about.
+  const name = await trigger.first().getAttribute('aria-label')
+  if (name === null || !name.startsWith('What goes in this field')) {
+    fail(`T1/T5: the trigger for ${id} has no accessible name naming its field, got ${name}`)
+  }
+  await trigger.first().click()
+  await page.waitForTimeout(40)
+  const shown = (await page.locator('.field-help-panel').first().innerText().catch(() => '')) ?? ''
+  if (shown.trim() !== guidance[id].trim()) {
+    fail(`T1: the guidance shown for ${id} is not the copy specified for it`)
+  }
+  // T6: entirely inside the reference viewport.
+  const box = await page.locator('.field-help-panel').first().boundingBox()
+  if (box === null) {
+    fail(`T6: the guidance panel for ${id} has no box`)
+  } else if (box.x < 0 || box.y < 0 || box.x + box.width > 1366 || box.y + box.height > 650) {
+    fail(
+      `T6: the guidance panel for ${id} renders outside the reference viewport ` +
+        `(x ${Math.round(box.x)}, y ${Math.round(box.y)}, w ${Math.round(box.width)}, h ${Math.round(box.height)})`,
+    )
+  }
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(40)
+}
+
+/* T4. Opening one closes any other. */
+await page.locator('[data-help-for="staining-volume"]').first().click()
+await page.waitForTimeout(40)
+await page.locator('[data-help-for="cell-number"]').first().click()
+await page.waitForTimeout(40)
+const openPanels = await page.locator('.field-help-panel').count()
+if (openPanels !== 1) fail(`T4: ${openPanels} guidance panels were open at once, expected 1`)
+
+/* T3 and T5. Keyboard open, focus into the panel, Escape closes, focus back
+ * on the trigger. A `<button>` fires click for Enter and for Space natively,
+ * so the keyboard path is the same path, which is the point of using one. */
+await page.keyboard.press('Escape')
+await page.waitForTimeout(40)
+await page.locator('[data-help-for="points"]').first().focus()
+await page.keyboard.press('Enter')
+await page.waitForTimeout(60)
+if ((await page.locator('.field-help-panel').count()) !== 1) {
+  fail('T3: Enter on a focused guidance trigger did not open its panel')
+}
+const focusedIsPanel = await page.evaluate(() =>
+  document.activeElement?.classList.contains('field-help-panel'),
+)
+if (focusedIsPanel !== true) fail('T5: focus did not move into the guidance panel on open')
+await page.keyboard.press('Escape')
+await page.waitForTimeout(60)
+if ((await page.locator('.field-help-panel').count()) !== 0) {
+  fail('T3: Escape did not close the guidance panel')
+}
+const focusReturned = await page.evaluate(
+  () => document.activeElement?.getAttribute('data-help-for') ?? null,
+)
+if (focusReturned !== 'points') fail('T5: focus did not return to the trigger when the panel closed')
+
+/* T3. Space opens, and a second press of the trigger closes it again. */
+await page.keyboard.press(' ')
+await page.waitForTimeout(60)
+if ((await page.locator('.field-help-panel').count()) !== 1) {
+  fail('T3: Space on a focused guidance trigger did not open its panel')
+}
+await page.locator('[data-help-for="points"]').first().click()
+await page.waitForTimeout(60)
+if ((await page.locator('.field-help-panel').count()) !== 0) {
+  fail('T3: clicking the trigger again did not close its panel')
+}
+
+/* T3. A pointer press outside closes it, and returns focus. */
+await page.locator('[data-help-for="points"]').first().click()
+await page.waitForTimeout(60)
+await page.locator('h1').first().click()
+await page.waitForTimeout(60)
+if ((await page.locator('.field-help-panel').count()) !== 0) {
+  fail('T3: a click outside did not close the guidance panel')
+}
+
+/* T7. No guidance sentence reaches the structured object shown on the page.
+ * The unit tests pin the same property against `notebookLine` and `toJson`;
+ * this is the rendered half of it. */
+const structured = (await page.locator('.options pre').first().innerText().catch(() => '')) ?? ''
+for (const id of guidedIds) {
+  const fingerprint = guidance[id].split(' ').slice(0, 9).join(' ')
+  if (structured.includes(fingerprint)) {
+    fail(`T7: the guidance for ${id} appears in the structured result on the page`)
+  }
+}
+
+/* ---------------------------------------------------------------------- *
+ * T8 to T11, and C4-ST-03: what a restored value looks like               *
+ * ---------------------------------------------------------------------- *
+ *
+ * SEEDED WITH THE OLDER STORED SHAPE, deliberately. Typing a value now
+ * records it as confirmed, so a document this session wrote comes back with
+ * nothing to mark, which is T10 working rather than a gap. The state under
+ * test here is the one a reader of the currently-deployed build actually
+ * has: values in storage, no confirmations recorded against them.
+ */
+const LEGACY_DOCUMENT = {
+  stockKind: 'stated', stockValue: '0.2', stockUnit: 'mg/mL',
+  stockMassBasis: 'antibody-protein', stockSource: 'certificate-of-analysis',
+  vendorBasis: 'per-test-volume-stated', vendorAmountKind: 'volume',
+  vendorAmountValue: '5', vendorAmountUnit: 'uL',
+  vendorTestVolume: '100', vendorTestVolumeUnit: 'uL',
+  vendorConcentrationKind: 'concentration', vendorConcentrationValue: '', vendorConcentrationUnit: 'ug/mL',
+  vendorCellsKind: 'stated', vendorCells: '1', vendorCellsUnit: 'cells-1e6',
+  stainingVolume: '50', stainingVolumeUnit: 'uL',
+  cellNumber: '2', cellNumberUnit: 'cells-1e6',
+  pipettingMinimum: '1', pipettingMinimumEntered: true,
+  topForm: '3', topValue: '8', topVolumeUnit: 'uL', topConcentrationUnit: 'ug/mL',
+  dilutionFactor: '2', points: '12',
+}
+await page.evaluate(
+  ([key, doc]) => localStorage.setItem(key, JSON.stringify(doc)),
+  ['c4.state.v1', LEGACY_DOCUMENT],
+)
 await page.reload({ waitUntil: 'networkidle' })
-const retainedMarkers = await page.locator('.retained-marker').count()
-const restored = await page.inputValue('#staining-volume').catch(() => '')
-if (restored !== '' && retainedMarkers === 0) {
-  fail('values were restored across a reload without being marked as retained')
+await page.waitForTimeout(400)
+
+/* T8. The explanation appears once, and every carried-over value is marked. */
+const notes = await page.locator('.retention-note').count()
+if (notes !== 1) fail(`T8: the retention explanation appears ${notes} times, expected exactly 1`)
+const markedOnLoad = await page.locator('.retained-marker').count()
+if (markedOnLoad === 0) {
+  fail('T8, and C4-ST-03: values were restored from storage with nothing marked as carried over')
+}
+const railMarkedOnLoad = await page.locator('.rail-declarations .retained-marker').count()
+if (railMarkedOnLoad === 0) {
+  fail('T8: the declaration line beside the series marks nothing as carried over')
+}
+
+/* T11. C4-NF-03 still holds with the markers and the explanation line in
+ * place. The markers are IN the sticky declaration line, which has no scroll
+ * of its own, so this is measured rather than assumed. */
+const stickyWithMarkers = await page.locator('.series-sticky').boundingBox()
+if (stickyWithMarkers === null) {
+  fail('T11: the sticky declaration block is not present with a restored document')
+} else if (stickyWithMarkers.height > 650) {
+  fail(
+    `T11: with retained markers the sticky block is ${Math.round(stickyWithMarkers.height)}px, ` +
+      'taller than the 650px reference viewport',
+  )
+}
+const markedSweep = await sweepWindowPositions()
+if (markedSweep.failures > 0) {
+  fail(
+    `T11: C4-NF-03 is not met with retained markers present, at ${markedSweep.failures} of ` +
+      `${markedSweep.checked} positions (first: ${markedSweep.worstAt})`,
+  )
+}
+const layoutNoteMarkers =
+  `C4-NF-03 with a restored document, every declaration marked as carried over: MET, sticky block ` +
+  `${Math.round(stickyWithMarkers?.height ?? 0)}px at the reference viewport, at all ${markedSweep.checked} ` +
+  'acceptance-25 positions where a row was in view.'
+
+/* T9. Confirming a panel clears its marks, in the panel and in the results
+ * declaration line, in one action, and leaves every other panel alone. */
+await page.evaluate(() => window.scrollTo(0, 0))
+const beforeConfirm = await page.locator('.retained-marker').count()
+const confirmButtons = await page.locator('button.confirm-values').count()
+if (confirmButtons === 0) fail('T9: there is no control to confirm a panel of restored values')
+await page.locator('button.confirm-values').first().click()
+await page.waitForTimeout(200)
+const afterConfirm = await page.locator('.retained-marker').count()
+if (!(afterConfirm < beforeConfirm)) {
+  fail(`T9: confirming a panel did not clear any marker (${beforeConfirm} before, ${afterConfirm} after)`)
+}
+if (afterConfirm === 0) {
+  fail('T9: confirming one panel cleared every marker on the page, not only its own panel’s')
+}
+
+/* T10. The confirmation survives a reload: the marks it cleared stay clear,
+ * and the ones it did not stay marked. This is the property a per-load
+ * recomputation of retention gets wrong, and the reason confirmation is
+ * persisted rather than held in memory. */
+await page.reload({ waitUntil: 'networkidle' })
+await page.waitForTimeout(400)
+const afterReload = await page.locator('.retained-marker').count()
+if (afterReload !== afterConfirm) {
+  fail(
+    `T10: confirmation did not survive a reload (${afterConfirm} markers before, ${afterReload} after)`,
+  )
+}
+if (afterReload === 0) {
+  fail('T10: a reload cleared every marker, including ones that were never confirmed')
+}
+
+/* T12. The required disclosures are still on the page, none of them moved
+ * behind a trigger. Re-read after the reload, and asserted against the same
+ * phrases the earlier sections check, so a disclosure quietly relocated into
+ * a tooltip fails here rather than being noticed by a reader. */
+const disclosuresAfter = await page.locator('body').innerText()
+for (const [what, phrase] of [
+  ['C4-OUT-06, the scope statement', 'Research use only. Not qualified for GxP decision-making.'],
+  ['C4-FC-01, the failure classes', 'Loss of antibody activity'],
+  ['C4-CN-01, the constants register', 'Minimum reliable pipetting volume'],
+  ['C4-OUT-10, the staining-volume convention', 'final volume of the stain, including the antibody'],
+  ['C4-OUT-11, the dilution convention', 'final volume divided by stock volume'],
+  ['C4-OUT-07, precision and rounding', 'rounded half away from zero'],
+  ['the privacy statement', 'Your data stays in your browser'],
+]) {
+  if (!disclosuresAfter.includes(phrase)) {
+    fail(`T12: ${what} is no longer visible on the page`)
+  }
 }
 
 // "Clear stored data" means what it says: the key is gone, not rewritten empty.
@@ -679,6 +937,8 @@ console.log(
     'their rows, and the failure classes, the constants register and the three convention\n' +
     'statements are all on the page.\n' +
     layoutNote +
+    '\n' +
+    layoutNoteMarkers +
     '\n' +
     (isDeployedRun
       ? `ACCEPTANCE TEST 17: PASSED, at ${pageUrl}, ${new Date().toISOString()}.\n` +

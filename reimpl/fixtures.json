@@ -247,7 +247,7 @@
       }
     },
     {
-      "id": "c4-fx-four-flag-target-user",
+      "id": "c4-fx-24-four-flag-target-user",
       "assumption": "Nadira's second review, D2: the declaration set behind the four-flag fixture the layout remedy is measured against (C4-FL-01, C4-FL-03, C4-FL-07 and C4-FL-08 together). Not an edge case: a different staining volume, a different cell number, a top point below the vendor recommendation and a pipetting minimum in hand together describe an ordinary user, not an unusual one. Kept in the shared fixture set so the arithmetic behind all four flags stays cross-checked, alongside acceptance 25's own use of this same declaration set at the reference viewport.",
       "inputs": {
         "stock": { "kind": "stated", "concentration": { "value": 0.2, "unit": "mg/mL" }, "massBasis": "antibody-protein" },

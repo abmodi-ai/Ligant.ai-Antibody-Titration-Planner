@@ -1175,13 +1175,54 @@ table caption {
   font-weight: 600;
 }
 
-/* A value carried across a reload, the one pre-filled suggestion, and a top
-   point cleared because its form stopped being computable. All three are
-   amber because all three are a decision the reader has not made yet: one is
-   a declaration they did not make in this session, one a number the tool
-   proposed, and one a value the tool would not relabel on their behalf. None
-   is a warning. */
-.retained-marker, .suggestion-marker, .reentry-marker {
+/* A value carried across a reload, and the pre-filled suggestions.
+ *
+ * QUIETER THAN THEY WERE, deliberately. These used to be filled amber chips
+ * in uppercase, and a reader meeting eleven of them on a restored form read
+ * them as eleven alerts, could not find out what any of them meant, and had
+ * no way to clear one. They are annotations on a label, not status: muted
+ * text, an amber dot to carry the association with a decision still to be
+ * made, no fill and no uppercase. What makes them legible is not weight but
+ * that each is now explained (its own `FieldHelp`) and clearable (the panel's
+ * "Confirm these values"). Amber stays the colour of a reader's decision; a
+ * carried-over value is a decision not yet made, so the dot is amber and the
+ * text is not.
+ */
+.retained-marker, .suggestion-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+.retained-marker::before, .suggestion-marker::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--brand-amber);
+  flex-shrink: 0;
+}
+
+/* In the results rail the declaration line is a fixed-width flex row that
+ * C4-NF-03 measures the height of, so the marker there is the dot alone: the
+ * words belong beside the input the reader edits, not in the summary they
+ * read a row under. §4.1.1 permits either. */
+.rail-declarations .retained-marker, .rail-declarations .suggestion-marker {
+  gap: 0;
+  margin-left: 5px;
+  font-size: 0;
+}
+
+/* The top point cleared because its form stopped being computable. This one
+   stays loud: it is not an annotation, it is a value that has gone. */
+.reentry-marker {
   display: inline-block;
   margin-left: 6px;
   padding: 1px 6px;
@@ -1194,6 +1235,102 @@ table caption {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   vertical-align: 1px;
+}
+
+/* ---------- guidance, behind a trigger rather than under the field ----------
+ *
+ * C4-OUT-12: guidance lives in the input control. The trigger is small and
+ * low-contrast until hovered or focused, so eighteen of them down a column
+ * read as punctuation rather than as eighteen things demanding attention.
+ */
+.field-help-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 5px;
+  padding: 0;
+  border: 1px solid var(--neutral-300, var(--border));
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: 1px;
+}
+.field-help-trigger:hover, .field-help-trigger:focus-visible {
+  border-color: var(--brand-teal);
+  color: var(--brand-teal);
+}
+.field-help-trigger[aria-expanded="true"] {
+  border-color: var(--brand-teal);
+  color: var(--surface);
+  background: var(--brand-teal);
+}
+
+.field-help-panel {
+  position: fixed;
+  z-index: 40;
+  padding: 11px 13px;
+  background: var(--surface);
+  border: 1px solid var(--neutral-300, var(--border));
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 20px rgba(16, 24, 32, 0.13);
+  color: var(--text-secondary);
+  font-family: var(--font);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.field-help-panel:focus { outline: none; }
+.field-help-panel:focus-visible { outline: 2px solid var(--brand-teal); outline-offset: 2px; }
+/* A quantity inside guidance is still a quantity. */
+.field-help-panel code { font-family: var(--mono); font-size: 11px; }
+
+.panel-head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* A state message about what happened to a value, not guidance about what to
+   put in it. Distinct from `.hint`, which is why it survives the rule that
+   moved every inline help paragraph behind a trigger. */
+.field-note {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* The one line that explains the markers, on the first panel carrying any. */
+.retention-note {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--brand-amber);
+  background: var(--attention-wash);
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* "Confirm these values", in the panel header beside Change. Quiet: it is an
+   acknowledgement, not the primary action of the panel. */
+button.confirm-values {
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+button.confirm-values:hover, button.confirm-values:focus-visible {
+  border-color: var(--brand-teal);
+  color: var(--brand-teal);
 }
 
 /* The constants register. The status column is prose and is the point of the

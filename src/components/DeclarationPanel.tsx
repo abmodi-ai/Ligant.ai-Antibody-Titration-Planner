@@ -52,10 +52,36 @@ interface Props {
    * while collapsed: an expanded panel already marks the field itself.
    */
   retained?: boolean
+  /**
+   * Stand behind every unconfirmed value in this panel at once.
+   *
+   * The gap that made the marker feel like noise rather than information:
+   * editing a field cleared its own mark, so a reader who had checked a
+   * restored declaration and found it correct had no way to say so, and the
+   * only route to a clean form was to retype values that were already right.
+   * Absent where the panel has nothing outstanding, rather than rendered as
+   * a control that would do nothing.
+   */
+  onConfirm?: () => void
+  /**
+   * Shown once, above the fields, on the first panel carrying anything from
+   * a previous visit. Not repeated per panel: the explanation is the same
+   * everywhere, and repeating it is how a page teaches a reader to skip it.
+   */
+  note?: ReactNode
   children: ReactNode
 }
 
-export function DeclarationPanel({ step, title, summary, complete, retained = false, children }: Props) {
+export function DeclarationPanel({
+  step,
+  title,
+  summary,
+  complete,
+  retained = false,
+  onConfirm,
+  note,
+  children,
+}: Props) {
   // Null until the reader expresses a preference, after which theirs wins. A
   // panel the reader deliberately opened must not close itself again.
   const [open, setOpen] = useState<boolean | null>(null)
@@ -67,25 +93,36 @@ export function DeclarationPanel({ step, title, summary, complete, retained = fa
         <div className="titles">
           <span className="step">{step}</span>
           <h2>{title}</h2>
-          {!expanded && retained && <span className="retained-marker">retained</span>}
+          {!expanded && retained && <span className="retained-marker">from your last visit</span>}
         </div>
-        {complete && (
-          <button
-            type="button"
-            aria-expanded={expanded}
-            onClick={() => setOpen(!expanded)}
-            className="disclose"
-          >
-            {expanded ? 'Collapse' : 'Change'}
-          </button>
-        )}
+        <div className="panel-head-actions">
+          {onConfirm && (
+            <button type="button" className="confirm-values" onClick={onConfirm}>
+              Confirm these values
+            </button>
+          )}
+          {complete && (
+            <button
+              type="button"
+              aria-expanded={expanded}
+              onClick={() => setOpen(!expanded)}
+              className="disclose"
+            >
+              {expanded ? 'Collapse' : 'Change'}
+            </button>
+          )}
+        </div>
       </div>
       {expanded ? (
         <div className="panel-body stack" style={{ gap: 14 }}>
+          {note}
           {children}
         </div>
       ) : (
-        <div className="panel-body panel-summary">{summary}</div>
+        <div className="panel-body panel-summary">
+          {note}
+          {summary}
+        </div>
       )}
     </section>
   )

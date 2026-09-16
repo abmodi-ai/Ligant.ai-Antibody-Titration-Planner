@@ -53,8 +53,35 @@ export interface FormState {
   cellNumber: string
   cellNumberUnit: CellUnit
   pipettingMinimum: string
-  /** C4-SR-05 and R16. False while the pre-filled suggestion stands. */
+  /**
+   * C4-SR-05 and R16. False while the pre-filled suggestion stands.
+   *
+   * THIS IS THE ENGINE'S INPUT, not the marker's: it becomes
+   * `pipettingMinimum.provenance` and decides which C4-FL-03 wording the
+   * output carries. It flips only when the reader CHANGES the number. See
+   * `pipettingMinimumConfirmed` for why that is not the same question as
+   * whether the marker still shows.
+   */
   pipettingMinimumEntered: boolean
+
+  /*
+   * The suggestion markers, which are presentation and are deliberately NOT
+   * the same fields as the ones above and below them.
+   *
+   * A reader who confirms a panel has stood behind the value, so the marker
+   * saying "the tool chose this, not you" stops being true and clears. But
+   * the VALUE is still the tool's suggested one, and C4-SR-05 requires the
+   * output to record that it was left at the default rather than entered. So
+   * confirmation clears these and never touches `pipettingMinimumEntered`:
+   * the marker answers "has the reader stood behind this", the provenance
+   * answers "did the reader type a number", and conflating them would either
+   * put a suggestion on the output as a decision or leave a badge on a value
+   * the reader has explicitly confirmed.
+   */
+  pipettingMinimumConfirmed: boolean
+  stockUnitChosen: boolean
+  stainingVolumeUnitChosen: boolean
+  cellNumberUnitChosen: boolean
 
   /**
    * D3, Nadira's second review. A string, not `TopPointForm | ''`: every
@@ -110,6 +137,10 @@ export const EMPTY_FORM: FormState = {
   cellNumberUnit: 'cells-1e6',
   pipettingMinimum: String(SUGGESTED_PIPETTING_MINIMUM_UL),
   pipettingMinimumEntered: false,
+  pipettingMinimumConfirmed: false,
+  stockUnitChosen: false,
+  stainingVolumeUnitChosen: false,
+  cellNumberUnitChosen: false,
 
   /**
    * C4-SR-01, C4-AB-02 and Nadira's second review (D3). No form is

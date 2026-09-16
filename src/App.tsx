@@ -22,21 +22,32 @@ import { SCOPE_STATEMENT } from './lib/flags'
 import {
   MAX_POINTS,
   MIN_POINTS,
-  SUGGESTED_PIPETTING_MINIMUM_UL,
   acceptedTopPointForms,
   type ImportedMolecularWeight,
 } from './lib/normalise'
 import {
+  NOTHING_CONFIRMED,
   NOTHING_RETAINED,
+  PANEL_FIELDS,
   RETAINABLE_FIELDS,
+  RETAINED_MARKER_LABEL,
+  RETAINED_MARKER_TOOLTIP,
+  RETENTION_PANEL_NOTE,
   STORAGE_KEY,
-  confirmField,
+  SUGGESTION_MARKER_LABEL,
+  SUGGESTION_MARKER_TOOLTIP,
+  confirmFields,
+  confirmedToList,
+  heldOnRestore,
   persist,
   restoreInputs,
-  retainedOnRestore,
+  retainedMarks,
+  splitStored,
+  type ConfirmedFields,
   type RetainableField,
   type RetainedFields,
 } from './lib/retention'
+import { FieldHelp, FieldHelpProvider } from './components/shared/FieldHelp'
 import { decodeEnvelope } from './lib/transport'
 import { toJson } from './lib/serialise'
 import { APP_VERSION, TOOL_NAME } from './lib/site'
@@ -98,11 +109,28 @@ const FIELD_OF: Partial<Record<keyof FormState, RetainableField>> = {
   points: 'points',
 }
 
-function loadForm(): { form: FormState; retained: RetainedFields; topPointNeedsReentry: boolean } {
+interface LoadedForm {
+  form: FormState
+  /** Which fields came back from storage actually holding a value. */
+  held: RetainedFields
+  /** Which the reader had already stood behind, in some previous session. */
+  confirmed: ConfirmedFields
+  topPointNeedsReentry: boolean
+}
+
+const EMPTY_LOAD: LoadedForm = {
+  form: EMPTY_FORM,
+  held: NOTHING_RETAINED,
+  confirmed: NOTHING_CONFIRMED,
+  topPointNeedsReentry: false,
+}
+
+function loadForm(): LoadedForm {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw === null) return { form: EMPTY_FORM, retained: NOTHING_RETAINED, topPointNeedsReentry: false }
-    const restored = restoreInputs(JSON.parse(raw), EMPTY_FORM)
+    if (raw === null) return EMPTY_LOAD
+    const { form: storedForm, confirmed } = splitStored(JSON.parse(raw))
+    const restored = restoreInputs(storedForm, EMPTY_FORM)
     const held: Partial<Record<RetainableField, boolean>> = {}
     for (const [key, field] of Object.entries(FIELD_OF) as [keyof FormState, RetainableField][]) {
       const value = restored[key]
@@ -115,16 +143,43 @@ function loadForm(): { form: FormState; retained: RetainedFields; topPointNeedsR
     // load rather than trusted, the same as the interactive change.
     const { form: reconciled, invalidated } = reconcileTopPoint(restored)
     if (invalidated) held.topPoint = false
-    return { form: reconciled, retained: retainedOnRestore(held), topPointNeedsReentry: invalidated }
+    return {
+      form: reconciled,
+      held: heldOnRestore(held),
+      confirmed,
+      topPointNeedsReentry: invalidated,
+    }
   } catch {
-    return { form: EMPTY_FORM, retained: NOTHING_RETAINED, topPointNeedsReentry: false }
+    return EMPTY_LOAD
   }
 }
 
-/** C4-ST-03. Shown against any field whose value was carried over. */
-function Retained({ when }: { when: boolean }) {
+/**
+ * C4-ST-03. Shown against any field whose value was carried over.
+ *
+ * Carries its own explanation, because the badge that prompted this rework
+ * was unexplained anywhere on the page: a reader met it eleven times over and
+ * had no way to find out what they were being told.
+ */
+function Retained({ when, field }: { when: boolean; field: string }) {
   if (!when) return null
-  return <span className="retained-marker">retained</span>
+  return (
+    <span className="retained-marker">
+      {RETAINED_MARKER_LABEL}
+      <FieldHelp id={`retained-${field}`} label="carried over from your last visit" text={RETAINED_MARKER_TOOLTIP} />
+    </span>
+  )
+}
+
+/** C4-SR-01 and C4-UN-01. Shown against a value the tool proposed. */
+function Suggested({ when, field }: { when: boolean; field: string }) {
+  if (!when) return null
+  return (
+    <span className="suggestion-marker">
+      {SUGGESTION_MARKER_LABEL}
+      <FieldHelp id={`suggested-${field}`} label="suggested by the tool, not chosen" text={SUGGESTION_MARKER_TOOLTIP} />
+    </span>
+  )
 }
 
 /**
@@ -204,7 +259,17 @@ function panelSummaries(form: FormState) {
 export default function App() {
   const initial = useMemo(loadForm, [])
   const [form, setForm] = useState<FormState>(initial.form)
-  const [retained, setRetained] = useState<RetainedFields>(initial.retained)
+  /**
+   * `held` is fixed at load: which fields came back from storage holding a
+   * value. `confirmed` grows as the reader edits or confirms, and is what
+   * gets persisted. The visible marks are DERIVED from the two rather than
+   * being a third piece of state, so they cannot drift from either, and so
+   * that a confirmation surviving a reload is structural rather than
+   * something a future edit could forget to re-apply.
+   */
+  const [held] = useState<RetainedFields>(initial.held)
+  const [confirmed, setConfirmed] = useState<ConfirmedFields>(initial.confirmed)
+  const retained = useMemo(() => retainedMarks(held, confirmed), [held, confirmed])
   const [topPointNeedsReentry, setTopPointNeedsReentry] = useState(initial.topPointNeedsReentry)
   const [imported, setImported] = useState<ImportedMolecularWeight | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
@@ -251,18 +316,88 @@ export default function App() {
     })
   }, [])
 
-  // C4-ST-03. Storage mirrors work in progress: no work, no key.
+  /*
+   * C4-ST-03. Storage mirrors work in progress: no work, no key.
+   *
+   * The confirmation set travels WITH the form, in one document, because the
+   * two are only meaningful together: a confirmation naming a value that is
+   * no longer there says nothing, and a value with its confirmation lost
+   * comes back claiming to be unreviewed. `hasContent` still reads the form
+   * alone, so "Clear stored data" keeps removing the key rather than leaving
+   * a document behind that holds only confirmations.
+   */
   useEffect(() => {
-    persist(STORAGE_KEY, form, hasContent(form))
-  }, [form])
+    persist(STORAGE_KEY, { form, confirmed: confirmedToList(confirmed) }, hasContent(form))
+  }, [form, confirmed])
 
   /** Editing a field confirms THAT field, and says nothing about any other. */
   const set = <K extends keyof FormState>(key: K) => (value: FormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }))
     const field = FIELD_OF[key]
-    if (field !== undefined) setRetained((current) => confirmField(current, field))
+    if (field !== undefined) setConfirmed((current) => confirmFields(current, [field]))
     setCopied(false)
   }
+
+  /**
+   * Stand behind everything a panel is still carrying unconfirmed.
+   *
+   * Clears the retained marks for its fields, and the suggestion markers on
+   * the values the tool pre-filled in that panel. It deliberately does NOT
+   * touch `pipettingMinimumEntered`: that is the engine's provenance, and a
+   * reader confirming that the suggested 2 µL is what they want has agreed to
+   * the default, not entered a value of their own. C4-SR-05 requires the
+   * output to keep saying which of those two happened, so it keeps saying it.
+   */
+  const confirmPanel = (step: number) => () => {
+    setConfirmed((current) => confirmFields(current, PANEL_FIELDS[step] ?? []))
+    if (step === 1) setForm((current) => ({ ...current, stockUnitChosen: true }))
+    if (step === 3) {
+      setForm((current) => ({
+        ...current,
+        stainingVolumeUnitChosen: true,
+        cellNumberUnitChosen: true,
+        pipettingMinimumConfirmed: true,
+      }))
+    }
+    setCopied(false)
+  }
+
+  /**
+   * Whether a panel still has anything outstanding for the reader to stand
+   * behind.
+   *
+   * A carried-over value always counts, whatever else the panel holds. A
+   * suggestion the tool pre-filled counts only once the panel has actually
+   * been answered: offering "Confirm these values" against an untouched,
+   * empty panel asks the reader to stand behind nothing, and a control that
+   * does nothing the first four times it is seen is a control nobody reads
+   * the fifth time.
+   */
+  const panelHasUnconfirmed = (step: number, isComplete: boolean): boolean => {
+    const fields = PANEL_FIELDS[step] ?? []
+    if (fields.some((field) => retained[field])) return true
+    if (!isComplete) return false
+    if (step === 1) return !form.stockUnitChosen
+    if (step === 3) {
+      return (
+        !form.stainingVolumeUnitChosen ||
+        !form.cellNumberUnitChosen ||
+        (!form.pipettingMinimumEntered && !form.pipettingMinimumConfirmed)
+      )
+    }
+    return false
+  }
+
+  /*
+   * The explanation line, shown once, on the first panel that is actually
+   * carrying something from a previous visit. Repeating it on every panel is
+   * how a page teaches a reader to stop seeing it.
+   */
+  const firstRetainedPanel = [1, 2, 3, 4].find((step) =>
+    (PANEL_FIELDS[step] ?? []).some((field) => retained[field]),
+  )
+  const retentionNote = (step: number) =>
+    step === firstRetainedPanel ? <p className="retention-note">{RETENTION_PANEL_NOTE}</p> : undefined
 
   const summaries = panelSummaries(form)
   const complete = panelCompletion(form)
@@ -314,7 +449,7 @@ export default function App() {
       // Nothing to clear if storage was never available.
     }
     setForm(EMPTY_FORM)
-    setRetained(NOTHING_RETAINED)
+    setConfirmed(NOTHING_CONFIRMED)
     setTopPointNeedsReentry(false)
   }
 
@@ -331,6 +466,7 @@ export default function App() {
   const rejectionFor = (field: string) => rejections.filter((r) => r.field === field)
 
   return (
+    <FieldHelpProvider>
     <div className="app">
       <SkipLink />
       <Masthead title={TOOL_NAME}>
@@ -350,9 +486,13 @@ export default function App() {
               summary={summaries.stock}
               complete={complete.stock && result !== null}
               retained={retained.stockConcentration || retained.stockSource || retained.stockMassBasis}
+              onConfirm={panelHasUnconfirmed(1, complete.stock) ? confirmPanel(1) : undefined}
+              note={retentionNote(1)}
             >
                 <div className="field">
-                  <label htmlFor="stock-kind">Concentration</label>
+                  <label htmlFor="stock-kind">
+                    Concentration <FieldHelp id="stock-kind" label="Concentration" />
+                  </label>
                   <select
                     id="stock-kind"
                     value={form.stockKind}
@@ -364,7 +504,7 @@ export default function App() {
                       })
                       setForm(reconciled)
                       if (invalidated) {
-                        setRetained((current) => confirmField(current, 'topPoint'))
+                        setConfirmed((current) => confirmFields(current, ['topPoint']))
                         setTopPointNeedsReentry(true)
                       }
                       setCopied(false)
@@ -382,7 +522,8 @@ export default function App() {
                     <div className="field-row">
                       <div className="field">
                         <label htmlFor="stock-value">
-                          Stock concentration <Retained when={retained.stockConcentration} />
+                          Stock concentration <FieldHelp id="stock-value" label="Stock concentration" />
+                          <Retained when={retained.stockConcentration} field="stockConcentration" />
                         </label>
                         <input
                           id="stock-value"
@@ -395,12 +536,16 @@ export default function App() {
                       </div>
                       <div className="field">
                         <label htmlFor="stock-unit">
-                          Unit <span className="suggestion-marker">suggestion</span>
+                          Unit <FieldHelp id="stock-unit" label="Unit, stock concentration" />
+                          <Suggested when={!form.stockUnitChosen} field="stockUnit" />
                         </label>
                         <select
                           id="stock-unit"
                           value={form.stockUnit}
-                          onChange={(e) => set('stockUnit')(e.target.value as ConcentrationUnit)}
+                          onChange={(e) => {
+                            set('stockUnit')(e.target.value as ConcentrationUnit)
+                            setForm((current) => ({ ...current, stockUnitChosen: true }))
+                          }}
                         >
                           {CONCENTRATION_UNITS.map((unit) => (
                             <option key={unit} value={unit}>
@@ -410,14 +555,12 @@ export default function App() {
                         </select>
                       </div>
                     </div>
-                    <p className="hint">
-                      Nothing is pre-filled here and nothing is inferred from a clone or a catalogue
-                      number. Transcribe the value from the vial or the certificate.
-                    </p>
 
                     <div className="field">
                       <label htmlFor="stock-mass-basis">
-                        The stated mass is the mass of <Retained when={retained.stockMassBasis} />
+                        The stated mass is the mass of{' '}
+                        <FieldHelp id="stock-mass-basis" label="The stated mass is the mass of" />
+                        <Retained when={retained.stockMassBasis} field="stockMassBasis" />
                       </label>
                       <select
                         id="stock-mass-basis"
@@ -431,19 +574,15 @@ export default function App() {
                           </option>
                         ))}
                       </select>
-                      <p className="hint">
-                        Most datasheets for a fluorochrome conjugate quote the concentration of the
-                        antibody protein; a few quote the conjugate. The number looks the same in
-                        both cases. It matters only when a molecular weight is brought in to compute
-                        a molar concentration, and there it can be out by more than a factor of two.
-                      </p>
                     </div>
                   </>
                 )}
 
                 <div className="field">
                   <label htmlFor="stock-source">
-                    Where the concentration came from <Retained when={retained.stockSource} />
+                    Where the concentration came from{' '}
+                    <FieldHelp id="stock-source" label="Where the concentration came from" />
+                    <Retained when={retained.stockSource} field="stockSource" />
                   </label>
                   <select
                     id="stock-source"
@@ -469,10 +608,14 @@ export default function App() {
               summary={summaries.vendor}
               complete={complete.vendor && result !== null}
               retained={retained.vendorBasis || retained.vendorAmount || retained.vendorTestVolume || retained.vendorCellNumber}
+              onConfirm={panelHasUnconfirmed(2, complete.vendor) ? confirmPanel(2) : undefined}
+              note={retentionNote(2)}
             >
                 <div className="field">
                   <label htmlFor="vendor-basis">
-                    Basis of the recommendation <Retained when={retained.vendorBasis} />
+                    Basis of the recommendation{' '}
+                    <FieldHelp id="vendor-basis" label="Basis of the recommendation" />
+                    <Retained when={retained.vendorBasis} field="vendorBasis" />
                   </label>
                   <select
                     id="vendor-basis"
@@ -485,12 +628,6 @@ export default function App() {
                       </option>
                     ))}
                   </select>
-                  <p className="hint">
-                    A test is vendor-defined. Most datasheets mean 1 × 10⁶ cells in 100 µL, but that
-                    is a convention and not a standard, and some give an amount per test without the
-                    volume. Entering a recommendation is optional: a series anchored on a top point
-                    you chose is a legitimate design.
-                  </p>
                 </div>
 
                 {(form.vendorBasis === 'per-test-volume-stated' ||
@@ -498,7 +635,8 @@ export default function App() {
                   <div className="field-row">
                     <div className="field">
                       <label htmlFor="vendor-amount">
-                        Amount per test <Retained when={retained.vendorAmount} />
+                        Amount per test <FieldHelp id="vendor-amount" label="Amount per test" />
+                        <Retained when={retained.vendorAmount} field="vendorAmount" />
                       </label>
                       <input
                         id="vendor-amount"
@@ -536,7 +674,9 @@ export default function App() {
                   <div className="field-row">
                     <div className="field">
                       <label htmlFor="vendor-test-volume">
-                        Vendor test volume <Retained when={retained.vendorTestVolume} />
+                        Vendor test volume{' '}
+                        <FieldHelp id="vendor-test-volume" label="Vendor test volume" />
+                        <Retained when={retained.vendorTestVolume} field="vendorTestVolume" />
                       </label>
                       <input
                         id="vendor-test-volume"
@@ -567,7 +707,7 @@ export default function App() {
                   <div className="field-row">
                     <div className="field">
                       <label htmlFor="vendor-concentration">
-                        Recommended <Retained when={retained.vendorAmount} />
+                        Recommended <Retained when={retained.vendorAmount} field="vendorAmountConc" />
                       </label>
                       <input
                         id="vendor-concentration"
@@ -609,7 +749,10 @@ export default function App() {
                   form.vendorBasis === 'final-concentration') && (
                   <>
                     <div className="field">
-                      <label htmlFor="vendor-cells-kind">Vendor's stated cell number</label>
+                      <label htmlFor="vendor-cells-kind">
+                        Vendor's stated cell number{' '}
+                        <FieldHelp id="vendor-cells-kind" label="Vendor's stated cell number" />
+                      </label>
                       <select
                         id="vendor-cells-kind"
                         value={form.vendorCellsKind}
@@ -623,7 +766,9 @@ export default function App() {
                       <div className="field-row">
                         <div className="field">
                           <label htmlFor="vendor-cells">
-                            Vendor's stated cells per test <Retained when={retained.vendorCellNumber} />
+                            Vendor's stated cells per test{' '}
+                            <FieldHelp id="vendor-cells" label="Vendor's stated cells per test" />
+                            <Retained when={retained.vendorCellNumber} field="vendorCellNumber" />
                           </label>
                           <input
                             id="vendor-cells"
@@ -660,11 +805,14 @@ export default function App() {
               summary={summaries.context}
               complete={complete.context && result !== null}
               retained={retained.stainingVolume || retained.cellNumber || retained.pipettingMinimum}
+              onConfirm={panelHasUnconfirmed(3, complete.context) ? confirmPanel(3) : undefined}
+              note={retentionNote(3)}
             >
                 <div className="field-row">
                   <div className="field">
                     <label htmlFor="staining-volume">
-                      Staining volume <Retained when={retained.stainingVolume} />
+                      Staining volume <FieldHelp id="staining-volume" label="Staining volume" />
+                      <Retained when={retained.stainingVolume} field="stainingVolume" />
                     </label>
                     <input
                       id="staining-volume"
@@ -676,12 +824,16 @@ export default function App() {
                   </div>
                   <div className="field">
                     <label htmlFor="staining-volume-unit">
-                      Unit <span className="suggestion-marker">suggestion</span>
+                      Unit <FieldHelp id="staining-volume-unit" label="Unit, staining volume" />
+                      <Suggested when={!form.stainingVolumeUnitChosen} field="stainingVolumeUnit" />
                     </label>
                     <select
                       id="staining-volume-unit"
                       value={form.stainingVolumeUnit}
-                      onChange={(e) => set('stainingVolumeUnit')(e.target.value as VolumeUnit)}
+                      onChange={(e) => {
+                        set('stainingVolumeUnit')(e.target.value as VolumeUnit)
+                        setForm((current) => ({ ...current, stainingVolumeUnitChosen: true }))
+                      }}
                     >
                       {VOLUME_UNITS.map((unit) => (
                         <option key={unit} value={unit}>
@@ -691,16 +843,11 @@ export default function App() {
                     </select>
                   </div>
                 </div>
-                <p className="hint">
-                  <strong>The final volume of the stain, including the antibody</strong> and every
-                  other reagent added. Whether 100 µL means the volume the antibody goes into or the
-                  volume after it is added changes every concentration below.
-                </p>
-
                 <div className="field-row">
                   <div className="field">
                     <label htmlFor="cell-number">
-                      Cells per test <Retained when={retained.cellNumber} />
+                      Cells per test <FieldHelp id="cell-number" label="Cells per test" />
+                      <Retained when={retained.cellNumber} field="cellNumber" />
                     </label>
                     <input
                       id="cell-number"
@@ -712,12 +859,16 @@ export default function App() {
                   </div>
                   <div className="field">
                     <label htmlFor="cell-number-unit">
-                      Unit <span className="suggestion-marker">suggestion</span>
+                      Unit
+                      <Suggested when={!form.cellNumberUnitChosen} field="cellNumberUnit" />
                     </label>
                     <select
                       id="cell-number-unit"
                       value={form.cellNumberUnit}
-                      onChange={(e) => set('cellNumberUnit')(e.target.value as CellUnit)}
+                      onChange={(e) => {
+                        set('cellNumberUnit')(e.target.value as CellUnit)
+                        setForm((current) => ({ ...current, cellNumberUnitChosen: true }))
+                      }}
                     >
                       {CELL_UNITS.map((unit) => (
                         <option key={unit} value={unit}>
@@ -731,8 +882,16 @@ export default function App() {
                 <div className="field">
                   <label htmlFor="pipetting-minimum">
                     Minimum reliable pipetting volume, µL{' '}
-                    {!form.pipettingMinimumEntered && <span className="suggestion-marker">suggestion</span>}
-                    <Retained when={retained.pipettingMinimum} />
+                    <FieldHelp id="pipetting-minimum" label="Minimum reliable pipetting volume" />
+                    {/* The marker asks "has the reader stood behind this", which
+                        confirming answers. `pipettingMinimumEntered`, which drives
+                        the provenance on the output, asks whether they typed a
+                        number, which confirming does not change. */}
+                    <Suggested
+                      when={!form.pipettingMinimumEntered && !form.pipettingMinimumConfirmed}
+                      field="pipettingMinimum"
+                    />
+                    <Retained when={retained.pipettingMinimum} field="pipettingMinimum" />
                   </label>
                   <input
                     id="pipetting-minimum"
@@ -744,13 +903,6 @@ export default function App() {
                       setForm((current) => ({ ...current, pipettingMinimumEntered: true }))
                     }}
                   />
-                  <p className="hint">
-                    Pre-filled at {SUGGESTED_PIPETTING_MINIMUM_UL} µL as a suggestion, not a
-                    standard. The minimum a pipette delivers reliably is instrument- and
-                    operator-dependent, so no single value has a basis and none is imposed. Whatever
-                    is in this field is what the series is checked against, including this
-                    suggestion if you leave it, and the output records which it was.
-                  </p>
                 </div>
 
                 <RejectionList rejections={[...rejectionFor('staining-volume'), ...rejectionFor('cell-number'), ...rejectionFor('pipetting-minimum')]} />
@@ -763,11 +915,14 @@ export default function App() {
               summary={summaries.design}
               complete={complete.design && result !== null}
               retained={retained.topPoint || retained.dilutionFactor || retained.points}
+              onConfirm={panelHasUnconfirmed(4, complete.design) ? confirmPanel(4) : undefined}
+              note={retentionNote(4)}
             >
                 <div className="field-row">
                   <div className="field">
                     <label htmlFor="top-value">
-                      Top point <Retained when={retained.topPoint} />{' '}
+                      Top point <FieldHelp id="top-value" label="Top point" />
+                      <Retained when={retained.topPoint} field="topPoint" />{' '}
                       <NeedsReentry when={topPointNeedsReentry} />
                     </label>
                     <input
@@ -782,7 +937,9 @@ export default function App() {
                     />
                   </div>
                   <div className="field">
-                    <label htmlFor="top-form">Entered as</label>
+                    <label htmlFor="top-form">
+                      Entered as <FieldHelp id="top-form" label="Entered as" />
+                    </label>
                     <select
                       id="top-form"
                       value={form.topForm}
@@ -802,13 +959,13 @@ export default function App() {
                     </select>
                   </div>
                 </div>
-                <p className="hint">
-                  The value you type, in the form you type it in, is what is kept. The concentration
-                  it works out to is derived and shown below, and is recomputed whenever anything
-                  else changes.
-                </p>
+                {/* Not `.hint`, and not guidance: this explains why a value
+                    the reader entered is no longer there, which is a state
+                    message about what happened, in the same family as the
+                    retention note. Guidance about what to type in this field
+                    is behind the trigger on its label. */}
                 {topPointNeedsReentry && (
-                  <p className="hint">
+                  <p className="field-note">
                     The top point was cleared: its form stopped being computable when the stock
                     declaration last changed. Re-enter it in a form the current stock declaration
                     supports.
@@ -818,7 +975,9 @@ export default function App() {
                 <div className="field-row">
                   <div className="field">
                     <label htmlFor="dilution-factor">
-                      Dilution factor between points <Retained when={retained.dilutionFactor} />
+                      Dilution factor between points{' '}
+                      <FieldHelp id="dilution-factor" label="Dilution factor between points" />
+                      <Retained when={retained.dilutionFactor} field="dilutionFactor" />
                     </label>
                     <input
                       id="dilution-factor"
@@ -831,7 +990,8 @@ export default function App() {
                   </div>
                   <div className="field">
                     <label htmlFor="points">
-                      Points <Retained when={retained.points} />
+                      Points <FieldHelp id="points" label="Points" />
+                      <Retained when={retained.points} field="points" />
                     </label>
                     <input
                       id="points"
@@ -843,10 +1003,6 @@ export default function App() {
                     />
                   </div>
                 </div>
-                <p className="hint">
-                  Dilution factor is final volume divided by stock volume, so 1 in 100 is a factor
-                  of 100. Any factor greater than 1 is accepted, including a non-integer one.
-                </p>
 
                 <RejectionList rejections={[...rejectionFor('dilution-factor'), ...rejectionFor('points'), ...rejectionFor('top-point')]} />
             </DeclarationPanel>
@@ -935,14 +1091,14 @@ export default function App() {
                           <dt>Staining volume</dt>
                           <dd>
                             {formatSigFigs(result.normalised.stainingVolumeUl)} {UNIT_LABEL.uL}, final
-                            <Retained when={retained.stainingVolume} />
+                            <Retained when={retained.stainingVolume} field="rail-stainingVolume" />
                           </dd>
                         </div>
                         <div>
                           <dt>Cells per test</dt>
                           <dd>
                             {formatSigFigs(result.normalised.cells)}
-                            <Retained when={retained.cellNumber} />
+                            <Retained when={retained.cellNumber} field="rail-cellNumber" />
                           </dd>
                         </div>
                         <div>
@@ -954,14 +1110,14 @@ export default function App() {
                             {result.inputs.stock.kind === 'stated'
                               ? `${result.inputs.stock.concentration.value} ${UNIT_LABEL[result.inputs.stock.concentration.unit]}, ${STOCK_SOURCE_LABEL[result.inputs.stockSource]}`
                               : 'not stated by the vendor'}
-                            <Retained when={retained.stockConcentration || retained.stockSource} />
+                            <Retained when={retained.stockConcentration || retained.stockSource} field="rail-stock" />
                           </dd>
                         </div>
                         <div>
                           <dt>Vendor basis</dt>
                           <dd>
                             {vendorBasisSummary(result)}
-                            <Retained when={retained.vendorBasis} />
+                            <Retained when={retained.vendorBasis} field="rail-vendorBasis" />
                           </dd>
                         </div>
                         <div>
@@ -972,7 +1128,7 @@ export default function App() {
                             {result.inputs.stock.kind === 'stated'
                               ? STOCK_MASS_BASIS_SHORT[result.inputs.stock.massBasis]
                               : 'not stated by the vendor'}
-                            <Retained when={retained.stockMassBasis} />
+                            <Retained when={retained.stockMassBasis} field="rail-stockMassBasis" />
                           </dd>
                         </div>
                         <div>
@@ -980,7 +1136,7 @@ export default function App() {
                           <dd>
                             {formatSigFigs(result.normalised.pipettingMinimumUl)} {UNIT_LABEL.uL},{' '}
                             {result.inputs.pipettingMinimum.provenance === 'entered' ? 'entered' : 'suggested default'}
-                            <Retained when={retained.pipettingMinimum} />
+                            <Retained when={retained.pipettingMinimum} field="rail-pipettingMinimum" />
                           </dd>
                         </div>
                       </dl>
@@ -1112,5 +1268,6 @@ export default function App() {
         </span>
       </div>
     </div>
+    </FieldHelpProvider>
   )
 }
