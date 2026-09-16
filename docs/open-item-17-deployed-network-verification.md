@@ -45,6 +45,21 @@ C4-NF-03 at the reference viewport (1366 x 650), four-flag fixture: MET, under w
 ACCEPTANCE TEST 17: PASSED, at https://benchtools.ligant.ai/antibody-titration-planner/, 2026-09-16T14:54:09.575Z.
 ```
 
+## Re-run, 16 September 2026, after the input-guidance rework
+
+Re-run against the same address after the guidance tooltips and the state
+markers shipped, because acceptance 17 is a claim about the page as served
+and that page changed:
+
+```
+ACCEPTANCE TEST 17: PASSED, at https://benchtools.ligant.ai/antibody-titration-planner/, 2026-09-16T15:36:53.126Z.
+```
+
+The same run carried acceptance T1 to T12 of the input-guidance instruction,
+and both C4-NF-03 measurements: the four-flag fixture in each flag expansion
+state, and a restored document with every declaration marked as carried over
+(sticky block 208 px against 187 px unmarked, MET at all thirteen positions).
+
 ## Context: the standing Cloudflare bot-challenge
 
 For most of this project's build, `benchtools.ligant.ai` and its subpaths
