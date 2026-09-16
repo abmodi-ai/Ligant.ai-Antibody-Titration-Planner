@@ -83,15 +83,24 @@ export const CITATION_DOI: string | null = '10.5281/zenodo.22773732'
  *   1. Deploy.
  *   2. `node scripts/check-network.mjs https://<deployed-address>/`, which must
  *      print ACCEPTANCE TEST 17: PASSED.
- *   3. Only then set this to `true`, and redeploy.
+ *   3. Record that pass in docs/open-item-17-deployed-network-verification.md.
+ *   4. Only then set this to `true`, and redeploy.
  *
- * `scripts/check-network.mjs` enforces the pairing in the other direction: if
- * this is `true` and the run is local, the check fails, so the claim cannot go
- * live on the strength of a local run. Until then the footer states what is
- * actually established, which is a static scan and a real browser against the
- * build artefact, and says the deployed address is unverified.
+ * `scripts/check-network.mjs` enforces the pairing in the other direction:
+ * whenever this is `true`, ANY run, local or deployed, requires that record to
+ * exist and to name a passing result against this tool's own deployed address,
+ * so the claim cannot go live on an unrecorded pass either way (open item 18:
+ * an earlier version failed a local run for being local, which deadlocked
+ * `npm run verify` on the very deploy needed to have set this flag correctly).
+ *
+ * SET TRUE 16 September 2026. Recorded pass:
+ * docs/open-item-17-deployed-network-verification.md, run against
+ * https://benchtools.ligant.ai/antibody-titration-planner/ (the router
+ * address, not the raw *.pages.dev origin), the standing Cloudflare
+ * bot-challenge on that zone having cleared between the previous check and
+ * this one.
  */
-export const NETWORK_CLAIM_VERIFIED = false
+export const NETWORK_CLAIM_VERIFIED = true
 
 export interface Tool {
   id: string
