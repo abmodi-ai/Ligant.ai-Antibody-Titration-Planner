@@ -1386,3 +1386,16 @@ button.disclose {
   font-size: 11px;
   padding: 3px 9px;
 }
+
+/* The block the sticky declaration line is scoped to: itself, the series
+ * table, and the runway that keeps it pinned through the last row.
+ *
+ * WHY THIS WRAPPER EXISTS. Without it the sticky's containing block is the
+ * whole panel body, which since D2 also holds the full flag text below the
+ * table. The declarations therefore stayed pinned for roughly 300px after
+ * the last row had left the viewport, hanging over flag prose and then over
+ * empty space: a header describing a table that was no longer on screen.
+ * C4-NF-03 asks for the declarations to be present wherever a POINT is read,
+ * which is a floor, not a licence to pin them over everything that follows.
+ */
+.series-stuck-region { position: relative; }

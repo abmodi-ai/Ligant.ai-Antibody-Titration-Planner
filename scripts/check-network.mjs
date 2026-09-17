@@ -471,6 +471,73 @@ async function sweepWindowPositions() {
 
 const collapsedSweep = await sweepWindowPositions()
 
+/*
+ * THE OTHER HALF OF C4-NF-03, which this check was missing entirely.
+ *
+ * Everything above asserts the FLOOR: wherever a series point is read, the
+ * declarations are in view. Nothing asserted the CEILING, that the block
+ * stops being pinned once there is no longer a point to read. So a build in
+ * which the declarations stayed stuck to the top of the viewport for 300px
+ * after the last row had left, hanging over flag prose and then over empty
+ * page, passed this check on every run and shipped. It was found by a reader
+ * scrolling, which is the failure mode this whole section exists to replace.
+ *
+ * Measured rather than reasoned about: step down the page and find the
+ * positions where NO row is in view but the series panel is still on screen.
+ * At those positions the block must have released.
+ */
+const pinnedWithNothingToRead = await page.evaluate(() => {
+  const rows = [...document.querySelectorAll('.series-table tbody tr')]
+  const sticky = document.querySelector('.series-sticky')
+  const panel = document.querySelector('.panel-series')
+  /*
+   * Everything in the stuck region except the runway: the table, the
+   * per-form "not computable, and why" list, and the note explaining why
+   * two vendor multiples differ. All of those describe the columns of the
+   * table directly above them, so the declarations staying pinned while
+   * they are read is the same property holding rather than an over-run.
+   * Once they have gone too, nothing on screen is what the declarations
+   * qualify, and the block must let go.
+   *
+   * Taken as the last child that is not the spacer, rather than by naming
+   * the notes: an earlier version of this check named `.form-notes` alone
+   * and missed the vendor-multiples note, reporting a 54px over-run that
+   * was really the check looking at the wrong element.
+   */
+  const region = document.querySelector('.series-stuck-region')
+  const tail = [...region.children].filter((el) => !el.classList.contains('series-sticky-spacer')).pop()
+  const stuckAt = []
+  const limit = document.documentElement.scrollHeight - window.innerHeight
+  for (let y = 0; y <= limit; y += 25) {
+    window.scrollTo(0, y)
+    const panelRect = panel.getBoundingClientRect()
+    // Only positions where the panel is still on screen: past it the block
+    // has scrolled away with its own panel and says nothing either way.
+    if (panelRect.bottom <= 0 || panelRect.top >= window.innerHeight) continue
+    const anyRow = rows.some((r) => {
+      const q = r.getBoundingClientRect()
+      return q.bottom > 0 && q.top < window.innerHeight
+    })
+    if (anyRow) continue
+    // Still something of the table's own explanation on screen.
+    if (tail.getBoundingClientRect().bottom > 0) continue
+    const top = sticky.getBoundingClientRect().top
+    // Pinned means sitting at its `top` offset rather than scrolling with
+    // the page. 16px, with a couple of px of tolerance for subpixel layout.
+    if (Math.abs(top - 16) < 2) stuckAt.push(y)
+  }
+  window.scrollTo(0, 0)
+  return stuckAt
+})
+if (pinnedWithNothingToRead.length > 0) {
+  const span = `${pinnedWithNothingToRead[0]}px to ${pinnedWithNothingToRead[pinnedWithNothingToRead.length - 1]}px`
+  fail(
+    `C4-NF-03: the declaration block is still pinned at ${pinnedWithNothingToRead.length} scroll ` +
+      `positions (${span}) where neither a series row nor the table's own notes are in view. It ` +
+      'must release once there is no point being read, not stay stuck over whatever follows the table.',
+  )
+}
+
 await page.locator('.flag-summary summary').evaluateAll((els) => els.forEach((el) => el.click()))
 await page.waitForTimeout(100)
 const openDetails = await page.locator('.flag-summary[open]').count()

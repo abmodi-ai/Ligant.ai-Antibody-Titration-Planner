@@ -76,6 +76,19 @@ import {
 import type { TopPointForm } from './lib/normalise'
 
 /**
+ * `.series-sticky`'s own `top` offset, in px, mirrored from styles.css.
+ *
+ * The spacer has to be this much TALLER than the block it gives runway to:
+ * a sticky element stops being pinned once its container's bottom edge
+ * reaches `height + top` from the viewport top, so the container must outlast
+ * the table by exactly that much for the last row to clear the viewport with
+ * the declarations still in place. Kept as a named constant beside the one
+ * place that uses it rather than as a bare 16, because getting it wrong is
+ * invisible until someone scrolls to the last row of a twelve-point series.
+ */
+const STICKY_TOP_PX = 16
+
+/**
  * The top-point form select's options, in display order.
  *
  * Filtered by `acceptedTopPointForms` rather than duplicating its gate: this
@@ -1124,79 +1137,103 @@ export default function App() {
                       pre-filled by a suggestion, without being told so where
                       the row itself is visible.
                     */}
-                    <div className="series-sticky" ref={stickyRef}>
-                      <dl className="rail-declarations">
-                        <div>
-                          <dt>Staining volume</dt>
-                          <dd>
-                            {formatSigFigs(result.normalised.stainingVolumeUl)} {UNIT_LABEL.uL}, final
-                            <Retained when={retained.stainingVolume} field="rail-stainingVolume" />
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Cells per test</dt>
-                          <dd>
-                            {formatSigFigs(result.normalised.cells)}
-                            <Retained when={retained.cellNumber} field="rail-cellNumber" />
-                          </dd>
-                        </div>
-                        <div>
-                          {/* I1: added to the required-values list this row
-                              carries, alongside the vendor recommendation
-                              values already folded into "Vendor basis" below. */}
-                          <dt>Stock concentration</dt>
-                          <dd>
-                            {result.inputs.stock.kind === 'stated'
-                              ? `${result.inputs.stock.concentration.value} ${UNIT_LABEL[result.inputs.stock.concentration.unit]}, ${STOCK_SOURCE_LABEL[result.inputs.stockSource]}`
-                              : 'not stated by the vendor'}
-                            <Retained when={retained.stockConcentration || retained.stockSource} field="rail-stock" />
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Vendor basis</dt>
-                          <dd>
-                            {vendorBasisSummary(result)}
-                            <Retained when={retained.vendorBasis} field="rail-vendorBasis" />
-                          </dd>
-                        </div>
-                        <div>
-                          {/* I2: the short label. The 30-word guidance stays
-                              only in the dropdown that chooses this. */}
-                          <dt>Stock mass basis</dt>
-                          <dd>
-                            {result.inputs.stock.kind === 'stated'
-                              ? STOCK_MASS_BASIS_SHORT[result.inputs.stock.massBasis]
-                              : 'not stated by the vendor'}
-                            <Retained when={retained.stockMassBasis} field="rail-stockMassBasis" />
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Pipetting minimum</dt>
-                          <dd>
-                            {formatSigFigs(result.normalised.pipettingMinimumUl)} {UNIT_LABEL.uL},{' '}
-                            {result.inputs.pipettingMinimum.provenance === 'entered' ? 'entered' : 'suggested default'}
-                            <Retained when={retained.pipettingMinimum} field="rail-pipettingMinimum" />
-                          </dd>
-                        </div>
-                      </dl>
-                      <FlagSummaryList flags={result.flags} />
-                      {result.flags.length === 0 && (
-                        <p className="hint">
-                          No flags raised. The declarations are consistent and every point can be
-                          pipetted from stock. That is not a statement that this series brackets the
-                          optimum, which this tool cannot determine.
-                        </p>
-                      )}
+                    <div className="series-stuck-region">
+                      <div className="series-sticky" ref={stickyRef}>
+                        <dl className="rail-declarations">
+                          <div>
+                            <dt>Staining volume</dt>
+                            <dd>
+                              {formatSigFigs(result.normalised.stainingVolumeUl)} {UNIT_LABEL.uL}, final
+                              <Retained when={retained.stainingVolume} field="rail-stainingVolume" />
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Cells per test</dt>
+                            <dd>
+                              {formatSigFigs(result.normalised.cells)}
+                              <Retained when={retained.cellNumber} field="rail-cellNumber" />
+                            </dd>
+                          </div>
+                          <div>
+                            {/* I1: added to the required-values list this row
+                                carries, alongside the vendor recommendation
+                                values already folded into "Vendor basis" below. */}
+                            <dt>Stock concentration</dt>
+                            <dd>
+                              {result.inputs.stock.kind === 'stated'
+                                ? `${result.inputs.stock.concentration.value} ${UNIT_LABEL[result.inputs.stock.concentration.unit]}, ${STOCK_SOURCE_LABEL[result.inputs.stockSource]}`
+                                : 'not stated by the vendor'}
+                              <Retained when={retained.stockConcentration || retained.stockSource} field="rail-stock" />
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Vendor basis</dt>
+                            <dd>
+                              {vendorBasisSummary(result)}
+                              <Retained when={retained.vendorBasis} field="rail-vendorBasis" />
+                            </dd>
+                          </div>
+                          <div>
+                            {/* I2: the short label. The 30-word guidance stays
+                                only in the dropdown that chooses this. */}
+                            <dt>Stock mass basis</dt>
+                            <dd>
+                              {result.inputs.stock.kind === 'stated'
+                                ? STOCK_MASS_BASIS_SHORT[result.inputs.stock.massBasis]
+                                : 'not stated by the vendor'}
+                              <Retained when={retained.stockMassBasis} field="rail-stockMassBasis" />
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Pipetting minimum</dt>
+                            <dd>
+                              {formatSigFigs(result.normalised.pipettingMinimumUl)} {UNIT_LABEL.uL},{' '}
+                              {result.inputs.pipettingMinimum.provenance === 'entered' ? 'entered' : 'suggested default'}
+                              <Retained when={retained.pipettingMinimum} field="rail-pipettingMinimum" />
+                            </dd>
+                          </div>
+                        </dl>
+                        <FlagSummaryList flags={result.flags} />
+                        {result.flags.length === 0 && (
+                          <p className="hint">
+                            No flags raised. The declarations are consistent and every point can be
+                            pipetted from stock. That is not a statement that this series brackets the
+                            optimum, which this tool cannot determine.
+                          </p>
+                        )}
+                      </div>
+                      <SeriesTable result={result} />
+                      {/* Runway, INSIDE the region, so the block stays pinned
+                          through the last row and releases immediately after
+                          it rather than travelling on down the panel. Sized
+                          from the measured block plus its own 16px offset,
+                          which is exactly how far the container has to
+                          outlast the table for the last row to clear the
+                          viewport with the declarations still in view. */}
+                      <div
+                        aria-hidden="true"
+                        className="series-sticky-spacer"
+                        style={{ height: stickyHeight > 0 ? stickyHeight + STICKY_TOP_PX : 0 }}
+                      />
                     </div>
-                    <SeriesTable result={result} />
                     {/* D2: the full flag text, moved out of the sticky block
                         and below the table, per Nadira's instruction; the
-                        sticky block carries only the compact form above. */}
-                    <FlagList flags={result.flags} />
-                    {/* Runway for `.series-sticky` to stay stuck through the last
-                        row; see the effect above for why it is measured, not
-                        fixed. */}
-                    <div aria-hidden="true" className="series-sticky-spacer" style={{ height: stickyHeight }} />
+                        sticky block carries only the compact form above.
+                        OUTSIDE the stuck region, so reading it does not
+                        happen under a pinned header describing a table that
+                        is no longer on screen.
+
+                        Pulled back up over the runway by exactly the runway's
+                        height. The region above has to be taller than its own
+                        content for the sticky block to stay pinned through the
+                        last row, but that extra extent does not have to be
+                        BLANK: left as-is it opened a 151px band of empty page
+                        between the table and the flags, trading one visible
+                        defect for another. The flags occupy it instead, so the
+                        runway costs nothing on screen. */}
+                    <div style={{ marginTop: stickyHeight > 0 ? -(stickyHeight + STICKY_TOP_PX) : 0 }}>
+                      <FlagList flags={result.flags} />
+                    </div>
                   </>
                 )}
               </div>
