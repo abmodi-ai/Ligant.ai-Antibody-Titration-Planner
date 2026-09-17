@@ -60,6 +60,27 @@ and both C4-NF-03 measurements: the four-flag fixture in each flag expansion
 state, and a restored document with every declaration marked as carried over
 (sticky block 208 px against 187 px unmarked, MET at all thirteen positions).
 
+## Re-run, 17 September 2026, the closing deploy
+
+Re-run after the four closing text corrections (URS version, the C4-HI-05
+rejection message, the "Confirm these values" label and tooltip, and the
+final-concentration vendor basis in the declaration line). Acceptance 17 is a
+claim about the page as served, so a changed page needs a fresh run:
+
+```
+ACCEPTANCE TEST 17: PASSED, at https://benchtools.ligant.ai/antibody-titration-planner/, 2026-09-17T16:40:15.054Z.
+```
+
+The same run carried acceptance T1 to T12 of the input-guidance instruction
+and both C4-NF-03 measurements, unchanged: the four-flag fixture in each flag
+expansion state, and a restored document with every declaration marked as
+carried over, 208 px at the reference viewport.
+
+**The bot-challenge is gone.** A bare `curl` of the deployed address returned
+200 rather than the 403 that blocked every earlier attempt, against a skip
+rule scoped to `benchtools.ligant.ai` created 16 September. Both this run and
+the plain request went through unchallenged.
+
 ## Context: the standing Cloudflare bot-challenge
 
 For most of this project's build, `benchtools.ligant.ai` and its subpaths
