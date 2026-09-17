@@ -81,6 +81,18 @@ carried over, 208 px at the reference viewport.
 rule scoped to `benchtools.ligant.ai` created 16 September. Both this run and
 the plain request went through unchallenged.
 
+## Re-run, 17 September 2026, after the sticky-release fix
+
+The declaration block was staying pinned roughly 300px after the series
+table had left the viewport. Fixed by scoping the sticky element's
+containing block to the table it describes, and the same run carries the new
+assertion that the block RELEASES once there is no point left to read, which
+acceptance 25 had never checked:
+
+```
+ACCEPTANCE TEST 17: PASSED, at https://benchtools.ligant.ai/antibody-titration-planner/, 2026-09-17T16:55:28.241Z.
+```
+
 ## Context: the standing Cloudflare bot-challenge
 
 For most of this project's build, `benchtools.ligant.ai` and its subpaths
