@@ -189,6 +189,24 @@ export const VENDOR_BASIS_LABEL: Readonly<Record<VendorBasis, string>> = {
 }
 
 /**
+ * The same four options, named rather than explained. I2, applied to the
+ * vendor basis.
+ *
+ * `final-concentration`'s full label is a sentence carrying the instruction a
+ * reader needs while CHOOSING, including the dilution convention. That is
+ * right in the dropdown and wrong everywhere a value is displayed: printing
+ * the whole sentence back as the declared value buries the value the summary
+ * exists to keep on screen, which is the same defect the stock mass basis had
+ * and the same remedy. The dropdown keeps the long form.
+ */
+export const VENDOR_BASIS_SHORT: Readonly<Record<VendorBasis, string>> = {
+  'per-test-volume-stated': 'per test, vendor test volume stated',
+  'per-test-volume-not-stated': 'per test, test volume not stated',
+  'final-concentration': 'as a final concentration',
+  none: 'no vendor recommendation used',
+}
+
+/**
  * The six forms of C4-UN-05, in the order the specification lists them.
  *
  * The identifiers are the form numbers because every requirement, flag and

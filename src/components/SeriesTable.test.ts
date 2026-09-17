@@ -54,7 +54,7 @@ describe('notebookLine', () => {
 
   it('carries the vendor basis and its recommended value, not just its label', () => {
     const line = notebookLine(run())
-    expect(line).toMatch(/Vendor: per test, with the test volume stated by the vendor, 10\.0 µg\/mL at the vendor's volume/)
+    expect(line).toMatch(/Vendor: per test, vendor test volume stated, 10\.0 µg\/mL at the vendor's volume/)
   })
 
   it('says nothing extra about the vendor where none was declared', () => {
@@ -90,11 +90,40 @@ describe('vendorBasisSummary', () => {
     expect(notebookLine(result)).toContain(vendorBasisSummary(result))
   })
 
+  it('prints the short label, not the dropdown’s own instructional sentence (I2)', () => {
+    const result = run({
+      vendor: {
+        basis: 'final-concentration',
+        concentration: { dilutionFactor: 100 },
+        cellNumber: 'not-stated',
+      },
+    })
+    expect(vendorBasisSummary(result)).toContain('as a final concentration')
+    // The long label carries the dilution convention, which belongs in the
+    // dropdown that chooses this and not in the value it produces.
+    expect(vendorBasisSummary(result)).not.toContain('a factor of 100')
+  })
+
+  it("omits 'at the vendor's volume' for a basis that has no vendor volume", () => {
+    // A final concentration is already a concentration and depends on no
+    // volume, so the phrase named a quantity that does not exist for it.
+    const final = run({
+      vendor: {
+        basis: 'final-concentration',
+        concentration: { dilutionFactor: 100 },
+        cellNumber: 'not-stated',
+      },
+    })
+    expect(vendorBasisSummary(final)).not.toContain("at the vendor's volume")
+    // And still carries it where the vendor did state a volume.
+    expect(vendorBasisSummary(run())).toContain("at the vendor's volume")
+  })
+
   it('falls back to the bare label where no recommendation reduces to a concentration', () => {
     const result = run({
       vendor: { basis: 'per-test-volume-not-stated', amountPerTest: { kind: 'volume', value: { value: 5, unit: 'uL' } } },
     })
-    expect(vendorBasisSummary(result)).toBe('per test, test volume not stated by the vendor')
+    expect(vendorBasisSummary(result)).toBe('per test, test volume not stated')
   })
 })
 

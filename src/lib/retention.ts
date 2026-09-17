@@ -291,6 +291,25 @@ export const RETENTION_PANEL_NOTE =
   'Values marked "from your last visit" were carried over from the last time you used this page. ' +
   'Confirm each one before you record the series.'
 
+/**
+ * What "Confirm these values" is about to do, said plainly.
+ *
+ * The control accepts whatever the panel currently holds, INCLUDING anything
+ * the tool filled in that the reader has not looked at. That is the whole
+ * risk: a stock concentration entered in µg/mL against a unit still sitting
+ * on the mg/mL suggestion is out by a thousand, and a confirmation that
+ * quietly swept it up would have recorded the tool's guess as the reader's
+ * own declaration on the output and in the notebook copy.
+ */
+export const CONFIRM_TOOLTIP =
+  'Records these values as your own choice, including any the tool suggested and you have not ' +
+  'changed. The output stops marking them as carried over or suggested.'
+
+/** The button's label where a value the TOOL chose is among what it accepts. */
+export const CONFIRM_LABEL_DEFAULT = 'Confirm these values'
+export const CONFIRM_LABEL_SUGGESTED_UNIT = 'Confirm the suggested unit'
+export const CONFIRM_LABEL_SUGGESTED_VALUES = 'Confirm the suggested values'
+
 /** Shown beside a value the tool filled in rather than the reader choosing. */
 export const SUGGESTION_MARKER_LABEL = 'suggested, not chosen'
 export const SUGGESTION_MARKER_TOOLTIP =

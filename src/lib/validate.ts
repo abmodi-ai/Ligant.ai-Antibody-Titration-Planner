@@ -96,7 +96,18 @@ export function rejectInputs(inputs: SeriesInputs): Rejection[] {
     rejections.push({
       code: 'C4-HI-05',
       field: 'points',
-      message: `The number of points is ${points}. A series must have a whole number of points, at least ${MIN_POINTS} so that there is something to compare, and at most ${MAX_POINTS} so that the whole series is legible on one screen.`,
+      /*
+       * NAMES THE RANGE AND GIVES NO REASON FOR THE UPPER BOUND, deliberately.
+       * This message used to say the cap existed "so that the whole series is
+       * legible on one screen". The constants register, on the same page,
+       * says the opposite: 12 is a round number chosen by inspection,
+       * "not derived from any arithmetic or layout constraint", and the
+       * one-screen proxy it appealed to was withdrawn at v0.5. Two
+       * statements on one page contradicting each other is worse than
+       * either, and the register is the one that is right. The lower bound
+       * keeps its reason, which the register does not contradict.
+       */
+      message: `The number of points is ${points}. A series has a whole number of points, at least ${MIN_POINTS} so that there is something to compare, and at most ${MAX_POINTS}.`,
     })
   }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeSeries } from './compute'
 import type { SeriesInputs } from './normalise'
+import { CONSTANTS_REGISTER } from './flags'
 
 /**
  * Section 7 and acceptance 10: every condition is rejected, with a message
@@ -135,6 +136,20 @@ describe('C4-HI-05, a point count outside 2 to 12 or not a whole number', () => 
 
   it.each([2, 6, 12] as const)('accepts %s points', (points) => {
     expect(rejectionsFor({ points })).toEqual([])
+  })
+
+  it('gives no reason for the upper bound that the constants register denies', () => {
+    // This message used to say the cap existed "so that the whole series is
+    // legible on one screen", while the `maximum-points` register row on the
+    // same page said 12 was chosen by inspection and "not derived from any
+    // arithmetic or layout constraint", the one-screen proxy having been
+    // withdrawn at v0.5. Two statements on one page contradicting each other
+    // is the class of defect this project keeps being caught by, so the
+    // absence of a reason here is pinned rather than left to a reviewer.
+    const [rejection] = rejectionsFor({ points: 13 })
+    expect(rejection.message).not.toMatch(/one screen|legible|layout|fits?\b/i)
+    const register = CONSTANTS_REGISTER.find((e) => e.id === 'maximum-points')
+    expect(register?.status).toMatch(/not derived from any arithmetic or layout constraint/)
   })
 })
 

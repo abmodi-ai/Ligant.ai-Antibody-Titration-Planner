@@ -29,6 +29,7 @@
  * so it can never carry a user past a declaration they have not made.
  */
 import { useState, type ReactNode } from 'react'
+import { CONFIRM_TOOLTIP } from '../lib/retention'
 
 interface Props {
   step: number
@@ -64,6 +65,18 @@ interface Props {
    */
   onConfirm?: () => void
   /**
+   * What the control is about to accept, where that includes a value the
+   * TOOL chose rather than the reader.
+   *
+   * "Confirm these values" is honest about a panel whose values the reader
+   * entered, and dangerously vague about one where a unit is still sitting
+   * at its suggestion: a stock entered in µg/mL and left on the mg/mL
+   * suggestion is a thousandfold error, and a button that silently accepts
+   * it has recorded the tool's guess as the reader's declaration. Where a
+   * suggestion is outstanding the label says so.
+   */
+  confirmLabel?: string
+  /**
    * Shown once, above the fields, on the first panel carrying anything from
    * a previous visit. Not repeated per panel: the explanation is the same
    * everywhere, and repeating it is how a page teaches a reader to skip it.
@@ -79,6 +92,7 @@ export function DeclarationPanel({
   complete,
   retained = false,
   onConfirm,
+  confirmLabel = 'Confirm these values',
   note,
   children,
 }: Props) {
@@ -97,8 +111,13 @@ export function DeclarationPanel({
         </div>
         <div className="panel-head-actions">
           {onConfirm && (
-            <button type="button" className="confirm-values" onClick={onConfirm}>
-              Confirm these values
+            <button
+              type="button"
+              className="confirm-values"
+              onClick={onConfirm}
+              title={CONFIRM_TOOLTIP}
+            >
+              {confirmLabel}
             </button>
           )}
           {complete && (

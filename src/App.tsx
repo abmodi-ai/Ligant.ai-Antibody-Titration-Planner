@@ -32,6 +32,9 @@ import {
   RETAINABLE_FIELDS,
   RETAINED_MARKER_LABEL,
   RETAINED_MARKER_TOOLTIP,
+  CONFIRM_LABEL_DEFAULT,
+  CONFIRM_LABEL_SUGGESTED_UNIT,
+  CONFIRM_LABEL_SUGGESTED_VALUES,
   RETENTION_PANEL_NOTE,
   STORAGE_KEY,
   SUGGESTION_MARKER_LABEL,
@@ -63,6 +66,7 @@ import {
   UNIT_LABEL,
   VENDOR_BASES,
   VENDOR_BASIS_LABEL,
+  VENDOR_BASIS_SHORT,
   VOLUME_UNITS,
   formatCellCount,
   type CellUnit,
@@ -388,6 +392,37 @@ export default function App() {
     return false
   }
 
+  /**
+   * Which suggestions a panel would accept if it were confirmed right now.
+   *
+   * Drives the button's label, so it cannot promise to confirm "these
+   * values" while quietly also accepting a unit the tool chose. Panel 1 has
+   * only the stock unit outstanding, which is why it names the unit
+   * specifically; panel 3 can have up to three, so it says values.
+   */
+  const outstandingSuggestions = (step: number): number => {
+    if (step === 1) return form.stockUnitChosen ? 0 : 1
+    if (step === 3) {
+      return (
+        (form.stainingVolumeUnitChosen ? 0 : 1) +
+        (form.cellNumberUnitChosen ? 0 : 1) +
+        (!form.pipettingMinimumEntered && !form.pipettingMinimumConfirmed ? 1 : 0)
+      )
+    }
+    return 0
+  }
+
+  const confirmLabelFor = (step: number): string => {
+    const outstanding = outstandingSuggestions(step)
+    if (outstanding === 0) return CONFIRM_LABEL_DEFAULT
+    // Panel 1's single outstanding suggestion is always the unit, so it can
+    // name it. Panel 3's may be a unit, the pipetting minimum, or both.
+    if (step === 1) return CONFIRM_LABEL_SUGGESTED_UNIT
+    return outstanding === 1 && !form.stainingVolumeUnitChosen
+      ? CONFIRM_LABEL_SUGGESTED_UNIT
+      : CONFIRM_LABEL_SUGGESTED_VALUES
+  }
+
   /*
    * The explanation line, shown once, on the first panel that is actually
    * carrying something from a previous visit. Repeating it on every panel is
@@ -487,6 +522,7 @@ export default function App() {
               complete={complete.stock && result !== null}
               retained={retained.stockConcentration || retained.stockSource || retained.stockMassBasis}
               onConfirm={panelHasUnconfirmed(1, complete.stock) ? confirmPanel(1) : undefined}
+              confirmLabel={confirmLabelFor(1)}
               note={retentionNote(1)}
             >
                 <div className="field">
@@ -609,6 +645,7 @@ export default function App() {
               complete={complete.vendor && result !== null}
               retained={retained.vendorBasis || retained.vendorAmount || retained.vendorTestVolume || retained.vendorCellNumber}
               onConfirm={panelHasUnconfirmed(2, complete.vendor) ? confirmPanel(2) : undefined}
+              confirmLabel={confirmLabelFor(2)}
               note={retentionNote(2)}
             >
                 <div className="field">
@@ -806,6 +843,7 @@ export default function App() {
               complete={complete.context && result !== null}
               retained={retained.stainingVolume || retained.cellNumber || retained.pipettingMinimum}
               onConfirm={panelHasUnconfirmed(3, complete.context) ? confirmPanel(3) : undefined}
+              confirmLabel={confirmLabelFor(3)}
               note={retentionNote(3)}
             >
                 <div className="field-row">
@@ -916,6 +954,7 @@ export default function App() {
               complete={complete.design && result !== null}
               retained={retained.topPoint || retained.dilutionFactor || retained.points}
               onConfirm={panelHasUnconfirmed(4, complete.design) ? confirmPanel(4) : undefined}
+              confirmLabel={confirmLabelFor(4)}
               note={retentionNote(4)}
             >
                 <div className="field-row">
@@ -1202,7 +1241,7 @@ export default function App() {
                         : 'no concentration stated by the vendor'}
                     </dd>
                     <dt>Vendor basis</dt>
-                    <dd className="prose-dd">{VENDOR_BASIS_LABEL[result.inputs.vendor.basis]}</dd>
+                    <dd className="prose-dd">{VENDOR_BASIS_SHORT[result.inputs.vendor.basis]}</dd>
                     <dt>Pipetting minimum</dt>
                     <dd>
                       {formatSigFigs(result.normalised.pipettingMinimumUl)} {UNIT_LABEL.uL},{' '}

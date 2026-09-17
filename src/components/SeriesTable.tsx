@@ -34,7 +34,7 @@ import {
   STOCK_MASS_BASIS_SHORT,
   STOCK_SOURCE_LABEL,
   UNIT_LABEL,
-  VENDOR_BASIS_LABEL,
+  VENDOR_BASIS_SHORT,
   type FormId,
 } from '../lib/units'
 
@@ -191,9 +191,20 @@ export function SeriesTable({ result }: { result: SeriesResult }) {
  * declaration.
  */
 export function vendorBasisSummary(result: SeriesResult): string {
-  const label = VENDOR_BASIS_LABEL[result.inputs.vendor.basis]
+  // I2: the short label, not the dropdown's own instructional sentence.
+  const label = VENDOR_BASIS_SHORT[result.inputs.vendor.basis]
   if (result.vendor === null || result.vendor.recommendedUgPerMl === null) return label
-  return `${label}, ${formatSigFigs(result.vendor.recommendedUgPerMl)} ${UNIT_LABEL['ug/mL']} at the vendor's volume`
+  const concentration = `${formatSigFigs(result.vendor.recommendedUgPerMl)} ${UNIT_LABEL['ug/mL']}`
+  /*
+   * "at the vendor's volume" qualifies the concentration by naming WHICH
+   * volume it was computed in, which only means something where the vendor
+   * stated one. A final concentration is already a concentration and depends
+   * on no volume at all, so the phrase named a quantity that does not exist
+   * for this basis.
+   */
+  return result.inputs.vendor.basis === 'final-concentration'
+    ? `${label}, ${concentration}`
+    : `${label}, ${concentration} at the vendor's volume`
 }
 
 /**

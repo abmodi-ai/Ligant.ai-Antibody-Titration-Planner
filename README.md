@@ -182,7 +182,7 @@ establish the claim, and still does not get to wave it through unrecorded.
 
 ## Status and limitations
 
-Built against **C4 URS v0.5**. The specification's open items that belong to
+Built against **C4 URS v0.6**. The specification's open items that belong to
 this repository are written up in `docs/`:
 
 | Item | State |
